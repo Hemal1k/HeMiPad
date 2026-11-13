@@ -31,6 +31,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 /// Problems and ideas: the Issues of the project on GitHub – shown as text only (HeMiPad opens nothing on the internet).
 const CONTACT: &str = "github.com/Hemal1k/HeMiPad/issues";
+const RELEASES: &str = "https://github.com/Hemal1k/HeMiPad/releases";
 const CHECK: char = '\u{E73E}';
 /// The spell checker (with the dictionaries of Windows, ~60 MB) is let go after this long without typing.
 const SPELL_IDLE: Duration = Duration::from_secs(180);
@@ -135,6 +136,7 @@ enum Act {
     Eol(Eol),
     DismissToast,
     Licences,
+    WhatsNew,
     SpellReplace(Range<usize>, String),
     SpellAdd(String),
     SpellIgnore(String),
@@ -1342,7 +1344,17 @@ impl HeMiPadApp {
                     ui.label(RichText::new(CONTACT).size(14.0).color(p.text2));
                 });
             });
+        });        card(ui, &p, |ui| {
+            row_layout(ui, 44.0, |ui| {
+                two_lines(ui, &p, tr("What's new", "Co je nového"), tr("The changes of every version and new downloads (in the browser)", "Změny každé verze a nové verze ke stažení (v prohlížeči)"));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if Btn::new(tr("Open", "Otevřít")).show(ui, &p).clicked() {
+                        acts.push(Act::WhatsNew);
+                    }
+                });
+            });
         });
+
         card(ui, &p, |ui| {
             row_layout(ui, 44.0, |ui| {
                 two_lines(ui, &p, tr("Licences", "Licence"), tr("Licences of the components used", "Licence použitých součástí"));
@@ -1642,6 +1654,7 @@ impl HeMiPadApp {
                     }
                 }
                 Act::DismissToast => self.toast = None,
+                Act::WhatsNew => sys::open_url(RELEASES),
                 Act::Licences => {
                     let file = std::env::temp_dir().join("HeMiPad-ThirdPartyNotices.txt");
                     match std::fs::write(&file, include_str!("../assets/ThirdPartyNotices.txt")) {
