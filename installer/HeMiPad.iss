@@ -1,5 +1,5 @@
-; HeMiPad installer (Inno Setup 6), built by release.ps1:  ISCC /DAppVersion=1.1.0 /DAppExe=<HeMiPad.exe> /DOutputDir=<folder>
-; For the current user, without administrator rights. Uninstalling removes the File Explorer item of the app as well.
+﻿; HeMiPad installer (Inno Setup 6), built by release.ps1:  ISCC /DAppVersion=1.1.0 /DAppExe=<HeMiPad.exe> /DOutputDir=<folder>
+; For the current user (no administrator) or for all users - the installer asks. Uninstalling removes the File Explorer item of the app as well.
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
@@ -20,10 +20,12 @@ AppPublisher=Richard Hemala
 AppPublisherURL=https://github.com/Hemal1k/HeMiPad
 AppSupportURL=https://github.com/Hemal1k/HeMiPad/issues
 AppUpdatesURL=https://github.com/Hemal1k/HeMiPad/releases
-DefaultDirName={localappdata}\Programs\HeMiPad
+DefaultDirName={autopf}\HeMiPad
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
+; the first page asks: for me only (default, no administrator) or for all users (Program Files, asks for administrator)
+PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -46,10 +48,10 @@ Name: "cs"; MessagesFile: "compiler:Languages\Czech.isl"
 Source: "{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{userprograms}\HeMiPad"; Filename: "{app}\HeMiPad.exe"
+Name: "{autoprograms}\HeMiPad"; Filename: "{app}\HeMiPad.exe"
 
 [Run]
-Filename: "{app}\HeMiPad.exe"; Description: "{cm:LaunchProgram,HeMiPad}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\HeMiPad.exe"; Description: "{cm:LaunchProgram,HeMiPad}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Registry]
 ; the File Explorer item the app writes when it is switched on: removed with the app

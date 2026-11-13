@@ -15,7 +15,7 @@ Everything of the classic Notepad – in the look of Windows 11, with **dark mod
 
 | File | For |
 |---|---|
-| `HeMiPad-Setup.exe` | The installer – for the current user (no administrator), with a Start menu entry and an uninstaller. |
+| `HeMiPad-Setup.exe` | The installer – just for you (no administrator) or for all users (Program Files), with a Start menu entry and an uninstaller. |
 | `HeMiPad-Portable.zip` | Just the program; run it from any folder. |
 
 Windows 10 / 11, x64. Nothing else needs to be installed.
