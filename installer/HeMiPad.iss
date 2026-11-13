@@ -41,14 +41,19 @@ CloseApplications=force
 LicenseFile=..\LICENSE
 
 [Languages]
+; English only
 Name: "en"; MessagesFile: "compiler:Default.isl"
-Name: "cs"; MessagesFile: "compiler:Languages\Czech.isl"
 
 [Files]
 Source: "{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
 
+[Tasks]
+; offered on its own page, off by default
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
 [Icons]
 Name: "{autoprograms}\HeMiPad"; Filename: "{app}\HeMiPad.exe"
+Name: "{autodesktop}\HeMiPad"; Filename: "{app}\HeMiPad.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\HeMiPad.exe"; Description: "{cm:LaunchProgram,HeMiPad}"; Flags: nowait postinstall skipifsilent runasoriginaluser
