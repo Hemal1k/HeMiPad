@@ -1,9 +1,13 @@
 # HeMiPad
 
+[![Latest release](https://img.shields.io/github/v/release/Hemal1k/HeMiPad?label=release)](https://github.com/Hemal1k/HeMiPad/releases/latest) [![Downloads](https://img.shields.io/github/downloads/Hemal1k/HeMiPad/total)](https://github.com/Hemal1k/HeMiPad/releases) [![License: MIT](https://img.shields.io/github/license/Hemal1k/HeMiPad)](LICENSE) ![Windows 10 / 11](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)
+
 Everything of the classic Notepad – in the look of Windows 11, with **dark mode**, **colours for JSON and YAML**, line numbers and
 **spell check**. Small, fast and without any internet features. English and Czech.
 
 **[Download](https://github.com/Hemal1k/HeMiPad/releases/latest)** · [Project page](https://hemal1k.github.io/hemipad.html) · [Report a problem](https://github.com/Hemal1k/HeMiPad/issues)
+
+![HeMiPad](.github/screenshot.png)
 
 > Not signed yet – Windows SmartScreen may warn the first time (More info → Run anyway).
 
