@@ -13,7 +13,7 @@ use crate::spell::{self, Reply, Spell};
 use crate::syntax::{self, Colors, Lang};
 use crate::sys;
 use crate::theme::{self, Palette, glyph};
-use crate::widgets::{Btn, CARD_RADIUS, Tone, card, info_bar, row_layout};
+use crate::widgets::{Btn, CARD_RADIUS, Tone, card, dropdown, info_bar, row_layout, section, toggle};
 use eframe::egui::{
     self, Align, Align2, Color32, CornerRadius, Event, Galley, Id, Key, KeyboardShortcut, Layout, Margin, Modifiers, Pos2,
     Rect, RichText, Shape, Stroke, TextBuffer, UiBuilder, pos2, vec2,
@@ -899,38 +899,10 @@ impl HeMiPadApp {
             // what is set once – appearance, language, File Explorer, About – under the gear on the right,
             // as the settings of Windows 11 apps
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let gear = RichText::new(glyph::SETTINGS.to_string()).font(theme::icon(16.0));
-            ui.menu_button(gear, |ui| {
-                ui.set_min_width(300.0);
-                ui.menu_button((blank(), tr("Theme", "Motiv")), |ui| {
-                    ui.set_min_width(200.0);
-                    for (m, label) in [(0u8, tr("Automatic", "Automaticky")), (1, tr("Light", "Světlý")), (2, tr("Dark", "Tmavý"))] {
-                        if check_item(ui, &p, self.s.theme == m, label, "") {
-                            acts.push(Act::Theme(m));
-                        }
-                    }
-                });
-                ui.menu_button((blank(), tr("Language", "Jazyk")), |ui| {
-                    ui.set_min_width(200.0);
-                    for (c, label) in [
-                        (i18n::Choice::Windows, tr("Automatic", "Automaticky")),
-                        (i18n::Choice::English, "English"),
-                        (i18n::Choice::Czech, "Čeština"),
-                    ] {
-                        if check_item(ui, &p, self.s.language == c, label, "") {
-                            acts.push(Act::UiLang(c));
-                        }
-                    }
-                });
-                let explorer = tr("“Open in HeMiPad” in File Explorer", "„Otevřít v HeMiPadu“ v Průzkumníku");
-                if check_item(ui, &p, self.shell_menu, explorer, "") {
-                    acts.push(Act::ShellMenu);
-                }
-                ui.separator();
-                item(ui, tr("About HeMiPad", "O aplikaci HeMiPad"), "", Act::About(true), acts);
-            })
-            .response
-            .on_hover_text(tr("Settings", "Nastavení"));
+            // the settings open in the whole window (as in HeMi Launcher)
+            if Btn::new("").icon(glyph::SETTINGS).subtle().tip(tr("Settings", "Nastavení")).show(ui, &p).clicked() {
+                acts.push(Act::About(true));
+            }
             });
         });
     }
@@ -1266,66 +1238,62 @@ impl HeMiPadApp {
         let _ = Pos2::ZERO;
     }
 
-    /// "About" in a small window of its own (with Mica and the title bar of the theme, as the main window).
-    fn about_window(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>) {
-        let title = tr("About HeMiPad", "O aplikaci HeMiPad");
-        let icon = egui::IconData { rgba: include_bytes!("../assets/HeMiPad-64.rgba").to_vec(), width: 64, height: 64 };
-        let builder = egui::ViewportBuilder::default()
-            .with_title(title)
-            .with_inner_size([460.0, if crate::launcher::exe().is_some() { 570.0 } else { 530.0 }])
-            .with_resizable(false)
-            .with_minimize_button(false)
-            .with_maximize_button(false)
-            .with_transparent(true)
-            .with_icon(icon);
-        let p = self.p;
-        let mut close = false;
-        let mut mica = self.mica;
-        ctx.show_viewport_immediate(egui::ViewportId::from_hash_of("hemipad-about"), builder, |ui, _class| {
-            let actx = ui.ctx().clone();
-            // the new window: its title bar in the theme (found by its title, egui does not hand out its handle)
-            let styled = actx.data_mut(|d| d.get_temp::<(bool, bool)>(Id::unique("about-styled")));
-            if styled.map(|s| s.0) != Some(p.light) {
-                let t = sys::wide(title);
-                let hwnd = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::FindWindowW(std::ptr::null(), t.as_ptr()) };
-                if !hwnd.is_null() {
-                    mica = theme::style_window(hwnd as isize, &p, true);
-                    actx.data_mut(|d| d.insert_temp(Id::unique("about-styled"), (p.light, mica)));
-                }
-            } else if let Some((_, m)) = styled {
-                mica = m;
-            }
-            let bg = if mica { Color32::TRANSPARENT } else { p.bg };
-            egui::CentralPanel::default()
-                .frame(egui::Frame::new().fill(bg).inner_margin(Margin { left: 20, right: 20, top: 16, bottom: 16 }))
-                .show(ui, |ui| self.about_page(ui, acts));
-            if actx.input(|i| i.viewport().close_requested() || i.key_pressed(Key::Escape)) {
-                close = true;
-            }
-        });
-        if close {
-            self.about = false;
-            self.request_focus(ctx);
-        }
-    }
-
-    /// The content of "About", as in HeMiDock: author, version, build date, contact, licences.
-    fn about_page(&self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
+    /// The title of the settings page with the way back to the text (as in HeMi Launcher).
+    fn settings_header(&self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
         let p = self.p;
         ui.horizontal(|ui| {
-            let (r, _) = ui.allocate_exact_size(vec2(40.0, 40.0), egui::Sense::hover());
-            let tex = ui.ctx().data_mut(|d| d.get_temp::<egui::TextureHandle>(Id::unique("about-icon")));
-            let tex = tex.unwrap_or_else(|| {
-                let img = egui::ColorImage::from_rgba_unmultiplied([64, 64], include_bytes!("../assets/HeMiPad-64.rgba"));
-                let t = ui.ctx().load_texture("hemipad-icon", img, egui::TextureOptions::LINEAR);
-                ui.ctx().data_mut(|d| d.insert_temp(Id::unique("about-icon"), t.clone()));
-                t
+            ui.set_min_height(40.0);
+            if Btn::new("").icon(glyph::BACK).subtle().tip(tr("Back", "Zpět")).show(ui, &p).clicked() {
+                acts.push(Act::About(false));
+            }
+            ui.add_space(4.0);
+            ui.label(RichText::new(tr("Settings", "Nastavení")).font(theme::display(28.0)).color(p.text));
+        });
+    }
+
+    /// The settings in the whole window (as in HeMi Launcher): theme, language, File Explorer – and About at the end.
+    fn settings_page(&self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
+        let p = self.p;
+        ui.spacing_mut().item_spacing.y = 4.0;
+        let row = |ui: &mut egui::Ui, title: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
+            card(ui, &p, |ui| {
+                row_layout(ui, 44.0, |ui| {
+                    ui.label(RichText::new(title).size(14.0).color(p.text));
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| add(ui));
+                });
             });
-            ui.painter().image(tex.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-            ui.add_space(6.0);
-            ui.label(RichText::new("HeMiPad").font(theme::display(28.0)).color(p.text));
+        };
+        section(ui, &p, tr("Appearance", "Vzhled"));
+        row(ui, tr("Theme", "Motiv"), &mut |ui| {
+            let items = [tr("Automatic", "Automaticky"), tr("Light", "Světlý"), tr("Dark", "Tmavý")];
+            if let Some(i) = dropdown(ui, &p, self.s.theme as usize, &items, 220.0) {
+                acts.push(Act::Theme(i as u8));
+            }
+        });
+        let langs = [i18n::Choice::Windows, i18n::Choice::English, i18n::Choice::Czech];
+        row(ui, tr("Language", "Jazyk"), &mut |ui| {
+            let items = [tr("Automatic", "Automaticky"), "English", "Čeština"];
+            let current = langs.iter().position(|c| *c == self.s.language).unwrap_or(0);
+            if let Some(i) = dropdown(ui, &p, current, &items, 220.0) {
+                acts.push(Act::UiLang(langs[i]));
+            }
         });
         ui.add_space(14.0);
+        section(ui, &p, tr("File Explorer", "Průzkumník"));
+        row(ui, tr("“Open in HeMiPad” in the menu of files", "„Otevřít v HeMiPadu“ v nabídce souborů"), &mut |ui| {
+            ui.label(RichText::new(if self.shell_menu { tr("On", "Zapnuto") } else { tr("Off", "Vypnuto") }).size(14.0).color(p.text));
+            if toggle(ui, &p, self.shell_menu).clicked() {
+                acts.push(Act::ShellMenu);
+            }
+        });
+        ui.add_space(14.0);
+        self.about_page(ui, acts);
+    }
+
+    /// The content of "About", as in HeMiDock: author, version, build date, the links.
+    fn about_page(&self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
+        let p = self.p;
+        section(ui, &p, tr("About", "O aplikaci"));
         ui.spacing_mut().item_spacing.y = 4.0;
         let value = |ui: &mut egui::Ui, label: &str, value: &str| {
             card(ui, &p, |ui| {
@@ -1340,27 +1308,25 @@ impl HeMiPadApp {
         value(ui, tr("Author", "Autor"), "Richard Hemala");
         value(ui, tr("Version", "Verze"), &format!("Beta {}", env!("CARGO_PKG_VERSION")));
         value(ui, tr("Build date", "Datum sestavení"), &i18n::build_date());
-        // as the About page of HeMiDock: a title and the button, no descriptions
-        let open = |ui: &mut egui::Ui, title: &str, act: Act, acts: &mut Vec<Act>| {
-            card(ui, &p, |ui| {
-                row_layout(ui, 36.0, |ui| {
-                    ui.label(RichText::new(title).size(14.0).color(p.text));
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if Btn::new(tr("Open", "Otevřít")).show(ui, &p).clicked() {
-                            acts.push(act);
-                        }
-                    });
-                });
-            });
-        };
-        open(ui, tr("Project on GitHub", "Projekt na GitHubu"), Act::OpenUrl(PROJECT), acts);
-        open(ui, tr("What's new", "Co je nového"), Act::OpenUrl(RELEASES), acts);
+        // the links side by side in one card (they wrap in the small window)
+        let mut links: Vec<(&str, Act)> = vec![
+            (tr("Project on GitHub", "Projekt na GitHubu"), Act::OpenUrl(PROJECT)),
+            (tr("What's new", "Co je nového"), Act::OpenUrl(RELEASES)),
+            (tr("Report a problem", "Nahlásit problém"), Act::OpenUrl(CONTACT)),
+            (tr("Licences", "Licence"), Act::Licences),
+        ];
         // HeMi Launcher on this PC: the updates are its job
         if crate::launcher::exe().is_some() {
-            open(ui, tr("Updates in HeMi Launcher", "Aktualizace v HeMi Launcheru"), Act::Launcher, acts);
+            // short – the window is small (the updates are what it is for)
+            links.insert(2, ("HeMi Launcher", Act::Launcher));
         }
-        open(ui, tr("Report a problem", "Nahlásit problém"), Act::OpenUrl(CONTACT), acts);
-        open(ui, tr("Licences", "Licence"), Act::Licences, acts);
+        ui.add_space(6.0);
+        let items: Vec<(&str, &str)> = links.iter().map(|(t, _)| (*t, "")).collect();
+        if let Some(i) = card(ui, &p, |ui| crate::widgets::button_row(ui, &p, &items))
+            && let Some((_, act)) = links.into_iter().nth(i)
+        {
+            acts.push(act);
+        }
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
@@ -1611,7 +1577,11 @@ impl HeMiPadApp {
                         );
                     }
                 }
-                Act::About(on) => self.about = on,
+                Act::About(on) => {
+                    self.about = on;
+                    // back in the text: the cursor in the editor again
+                    self.refocus = !on;
+                }
                 Act::ShellMenu => match crate::shell_menu::set(!self.shell_menu) {
                     Ok(()) => {
                         self.shell_menu = !self.shell_menu;
@@ -1776,6 +1746,41 @@ impl eframe::App for HeMiPadApp {
         let p = self.p;
         let bg = self.backdrop();
         let bar = egui::Frame::new().fill(bg).inner_margin(Margin { left: 6, right: 6, top: 2, bottom: 2 });
+        // the settings in the whole window (the gear); Esc and the arrow go back to the text
+        if self.about {
+            if ctx.input(|i| i.key_pressed(Key::Escape)) {
+                acts.push(Act::About(false));
+            }
+            egui::Panel::top("settings-header")
+                .frame(egui::Frame::new().fill(bg).inner_margin(Margin { left: 28, right: 28, top: 14, bottom: 14 }))
+                .show_separator_line(false)
+                .show(ui, |ui| self.settings_header(ui, &mut acts));
+            if let Some(t) = &self.toast {
+                let (text, tone) = (t.text.clone(), t.tone);
+                egui::Panel::bottom("settings-toast")
+                    .frame(egui::Frame::new().fill(bg).inner_margin(Margin { left: 28, right: 28, top: 6, bottom: 14 }))
+                    .show_separator_line(false)
+                    .show(ui, |ui| {
+                        if info_bar(ui, &p, tone, &text, Some(())) {
+                            acts.push(Act::DismissToast);
+                        }
+                    });
+            }
+            egui::CentralPanel::default()
+                .frame(egui::Frame::new().fill(bg).inner_margin(Margin { left: 28, right: 20, top: 0, bottom: 4 }))
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                        egui::Frame::new().inner_margin(Margin { left: 0, right: 8, top: 0, bottom: 12 }).show(ui, |ui| self.settings_page(ui, &mut acts));
+                    });
+                });
+            self.dialogs(&ctx);
+            self.act(&ctx, acts);
+            if self.s != self.saved_settings {
+                self.saved_settings = self.s.clone();
+                self.s.save();
+            }
+            return;
+        }
         egui::Panel::top("menu").frame(bar).show_separator_line(false).show(ui, |ui| self.menu_bar(ui, &mut acts));
         if self.find.is_some() {
             egui::Panel::top("find")
@@ -1803,9 +1808,6 @@ impl eframe::App for HeMiPadApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(bg).inner_margin(Margin { left: 10, right: 10, top: 2, bottom: 2 }))
             .show(ui, |ui| self.editor(ui, &mut acts));
-        if self.about {
-            self.about_window(&ctx, &mut acts);
-        }
         self.dialogs(&ctx);
         self.act(&ctx, acts);
         self.spell_tick(&ctx);

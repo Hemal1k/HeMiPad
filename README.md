@@ -31,7 +31,7 @@ Windows 10 / 11, x64 and ARM64. Nothing else needs to be installed.
 - **Spell check** with the dictionaries of Windows (the languages installed in Windows, suggestions on right click).
 - **Encodings**: UTF-8 with or without BOM, UTF-16 LE / BE, ANSI, OEM; line endings CRLF / LF / CR – in the status bar.
 - **.LOG** files get the time and date at their end, a file changed by another program is offered to reload.
-- **Settings**: theme (automatic / light / dark), language, and the optional File Explorer item “Open in HeMiPad”.
+- **Settings** in the whole window (the gear): theme (automatic / light / dark), language, the optional File Explorer item “Open in HeMiPad”, and About with the links.
 
 HeMiPad never connects to the internet. Its settings are in `%AppData%\HeMi\HeMiPad\settings.ini`.
 

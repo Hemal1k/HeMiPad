@@ -34,9 +34,7 @@ pub fn icon(size: f32) -> FontId {
 }
 
 /// Segoe Fluent Icons glyphs.
-#[allow(dead_code)]
 pub mod glyph {
-    pub const OPEN_FILE: char = '\u{E8E5}';
     pub const CLOSE: char = '\u{E711}';
     pub const COMPLETED: char = '\u{E930}';
     pub const BACK: char = '\u{E72B}';
@@ -46,7 +44,6 @@ pub mod glyph {
     pub const DOWN: char = '\u{E74B}';
     pub const CHEVRON_DOWN: char = '\u{E70D}';
     pub const CHEVRON_RIGHT: char = '\u{E76C}';
-    pub const REFRESH: char = '\u{E72C}';
     pub const SETTINGS: char = '\u{E713}';
 }
 

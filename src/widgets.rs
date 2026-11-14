@@ -1,5 +1,4 @@
 //! The controls of HeMiDock (WinUI 3) painted in egui – the same as in HeMiUnlocker (not every option is used here).
-#![allow(dead_code)]
 
 use crate::theme::{self, Palette, glyph};
 use eframe::egui::{self, Align, Align2, Color32, Layout, Margin, RichText, Sense, Stroke, StrokeKind, pos2, vec2};
@@ -39,19 +38,6 @@ pub fn row_layout(ui: &mut egui::Ui, height: f32, add: impl FnOnce(&mut egui::Ui
     ui.allocate_ui_with_layout(vec2(w, height), Layout::left_to_right(Align::Center), |ui| {
         ui.set_min_size(vec2(w, height));
         add(ui)
-    });
-}
-
-pub fn glyph_box(ui: &mut egui::Ui, g: char, size: f32, color: Color32) {
-    let (r, _) = ui.allocate_exact_size(vec2(32.0, 32.0), Sense::hover());
-    ui.painter().text(r.center(), Align2::CENTER_CENTER, g, theme::icon(size), color);
-}
-
-pub fn two_lines(ui: &mut egui::Ui, p: &Palette, title: &str, detail: &str) {
-    ui.vertical(|ui| {
-        ui.spacing_mut().item_spacing.y = 1.0;
-        ui.add(egui::Label::new(RichText::new(title).size(14.0).color(p.text)).truncate());
-        ui.add(egui::Label::new(RichText::new(detail).size(12.0).color(p.text2)).wrap());
     });
 }
 
@@ -138,14 +124,6 @@ impl<'a> Btn<'a> {
         self.kind = Kind::Subtle;
         self
     }
-    pub fn enabled(mut self, on: bool) -> Self {
-        self.enabled = on;
-        self
-    }
-    pub fn tint(mut self, c: Color32) -> Self {
-        self.tint = Some(c);
-        self
-    }
     pub fn tip(mut self, t: &'a str) -> Self {
         self.tip = Some(t);
         self
@@ -223,4 +201,82 @@ impl<'a> Btn<'a> {
         }
         resp
     }
+}
+
+/// Buttons of the same width side by side, filling the row (the links of About); in a narrow window two or more rows.
+/// Returns the index of the clicked one.
+pub fn button_row(ui: &mut egui::Ui, p: &Palette, items: &[(&str, &str)]) -> Option<usize> {
+    let gap = 8.0;
+    let w = ui.available_width();
+    let mut cols = items.len().max(1);
+    // as many in a row as fit with the longest text whole
+    let longest = items
+        .iter()
+        .map(|(t, _)| ui.painter().layout_no_wrap(t.to_string(), crate::theme::body(14.0), p.text).size().x)
+        .fold(0.0_f32, f32::max);
+    while cols > 1 && (w - gap * (cols - 1) as f32) / cols as f32 <= longest + 28.0 {
+        cols -= 1;
+    }
+    // the rows as even as they can be (5 in 3 + 2, not 4 + 1)
+    let rows = items.len().div_ceil(cols.max(1));
+    let cols = items.len().div_ceil(rows.max(1)).max(1);
+    let bw = (w - gap * (cols - 1) as f32) / cols as f32;
+    let mut clicked = None;
+    for (r, chunk) in items.chunks(cols).enumerate() {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            for (c, (text, tip)) in chunk.iter().enumerate() {
+                let b = Btn::new(text).width(bw);
+                let b = if tip.is_empty() { b } else { b.tip(tip) };
+                if b.show(ui, p).clicked() {
+                    clicked = Some(r * cols + c);
+                }
+            }
+        });
+        if r + 1 < items.len().div_ceil(cols) {
+            ui.add_space(gap);
+        }
+    }
+    clicked
+}
+
+/// A ComboBox of WinUI: a standard button with the chosen text and a chevron; the list opens below it.
+/// Returns the index chosen this frame.
+pub fn dropdown(ui: &mut egui::Ui, p: &Palette, current: usize, items: &[&str], width: f32) -> Option<usize> {
+    let text = items.get(current).copied().unwrap_or("");
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 32.0), Sense::click());
+    let (down, hover) = (resp.is_pointer_button_down_on(), resp.hovered());
+    let painter = ui.painter();
+    painter.rect_filled(rect, CONTROL_RADIUS, if down { p.control_pressed } else if hover { p.control_hover } else { p.control });
+    painter.rect_stroke(rect, CONTROL_RADIUS, Stroke::new(1.0, p.control_stroke), StrokeKind::Inside);
+    let r = CONTROL_RADIUS as f32;
+    painter.hline(rect.left() + r - 1.0..=rect.right() - r + 1.0, rect.bottom() - 0.5, Stroke::new(1.0, p.control_stroke_bottom));
+    let label = painter.layout(text.to_string(), theme::body(14.0), p.text, width - 48.0);
+    painter.galley(pos2(rect.left() + 12.0, rect.center().y - label.size().y / 2.0), label, p.text);
+    painter.text(pos2(rect.right() - 16.0, rect.center().y), Align2::CENTER_CENTER, glyph::CHEVRON_DOWN, theme::icon(12.0), p.text2);
+    if hover {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
+    }
+    let mut chosen = None;
+    egui::Popup::menu(&resp).width(width).show(|ui| {
+        ui.set_min_width(width - 12.0);
+        for (i, item) in items.iter().enumerate() {
+            let on = i == current;
+            let (r, row) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());
+            let painter = ui.painter();
+            if row.hovered() || on {
+                painter.rect_filled(r, 4, if row.hovered() { p.subtle_hover } else { p.subtle_pressed });
+            }
+            if on {
+                let bar = egui::Rect::from_center_size(pos2(r.left() + 2.0, r.center().y), vec2(3.0, 16.0));
+                painter.rect_filled(bar, 2, p.accent);
+            }
+            painter.text(pos2(r.left() + 14.0, r.center().y), Align2::LEFT_CENTER, *item, theme::body(14.0), p.text);
+            if row.clicked() {
+                chosen = Some(i);
+                ui.close();
+            }
+        }
+    });
+    chosen
 }
