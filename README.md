@@ -9,7 +9,7 @@ Everything of the classic Notepad – in the look of Windows 11, with **dark mod
 
 ![HeMiPad](.github/screenshot.png)
 
-> Not signed yet – Windows SmartScreen may warn the first time (More info → Run anyway).
+> The downloads are not code-signed, so Windows SmartScreen may warn the first time (More info → Run anyway). Each release has `SHA256SUMS.txt` to check them.
 
 ## Download
 

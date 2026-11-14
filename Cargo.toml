@@ -40,3 +40,10 @@ lto = true
 codegen-units = 1
 strip = true
 panic = "abort"
+
+# smaller debug builds (the build folder grew to several GB): line numbers only for the app, nothing for the libraries
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
