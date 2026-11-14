@@ -13,7 +13,7 @@ use crate::spell::{self, Reply, Spell};
 use crate::syntax::{self, Colors, Lang};
 use crate::sys;
 use crate::theme::{self, Palette, glyph};
-use crate::widgets::{Btn, CARD_RADIUS, Tone, card, info_bar, row_layout, two_lines};
+use crate::widgets::{Btn, CARD_RADIUS, Tone, card, info_bar, row_layout};
 use eframe::egui::{
     self, Align, Align2, Color32, CornerRadius, Event, Galley, Id, Key, KeyboardShortcut, Layout, Margin, Modifiers, Pos2,
     Rect, RichText, Shape, Stroke, TextBuffer, UiBuilder, pos2, vec2,
@@ -30,7 +30,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 /// Problems and ideas: the Issues of the project on GitHub – shown as text only (HeMiPad opens nothing on the internet).
-const CONTACT: &str = "github.com/Hemal1k/HeMiPad/issues";
+const CONTACT: &str = "https://github.com/Hemal1k/HeMiPad/issues";
+const PROJECT: &str = "https://github.com/Hemal1k/HeMiPad";
 const RELEASES: &str = "https://github.com/Hemal1k/HeMiPad/releases";
 const CHECK: char = '\u{E73E}';
 /// The spell checker (with the dictionaries of Windows, ~60 MB) is let go after this long without typing.
@@ -132,11 +133,13 @@ enum Act {
     Spelling,
     Syntax,
     About(bool),
+    /// HeMi Launcher, for the updates.
+    Launcher,
     Encoding(Encoding),
     Eol(Eol),
     DismissToast,
     Licences,
-    WhatsNew,
+    OpenUrl(&'static str),
     SpellReplace(Range<usize>, String),
     SpellAdd(String),
     SpellIgnore(String),
@@ -920,7 +923,7 @@ impl HeMiPadApp {
                     }
                 });
                 let explorer = tr("“Open in HeMiPad” in File Explorer", "„Otevřít v HeMiPadu“ v Průzkumníku");
-                if checkbox_item(ui, &p, self.shell_menu, explorer) {
+                if check_item(ui, &p, self.shell_menu, explorer, "") {
                     acts.push(Act::ShellMenu);
                 }
                 ui.separator();
@@ -1269,7 +1272,7 @@ impl HeMiPadApp {
         let icon = egui::IconData { rgba: include_bytes!("../assets/HeMiPad-64.rgba").to_vec(), width: 64, height: 64 };
         let builder = egui::ViewportBuilder::default()
             .with_title(title)
-            .with_inner_size([480.0, 470.0])
+            .with_inner_size([460.0, if crate::launcher::exe().is_some() { 570.0 } else { 530.0 }])
             .with_resizable(false)
             .with_minimize_button(false)
             .with_maximize_button(false)
@@ -1326,7 +1329,7 @@ impl HeMiPadApp {
         ui.spacing_mut().item_spacing.y = 4.0;
         let value = |ui: &mut egui::Ui, label: &str, value: &str| {
             card(ui, &p, |ui| {
-                row_layout(ui, 44.0, |ui| {
+                row_layout(ui, 36.0, |ui| {
                     ui.label(RichText::new(label).size(14.0).color(p.text));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         ui.label(RichText::new(value).size(14.0).color(p.text2));
@@ -1337,34 +1340,27 @@ impl HeMiPadApp {
         value(ui, tr("Author", "Autor"), "Richard Hemala");
         value(ui, tr("Version", "Verze"), &format!("Beta {}", env!("CARGO_PKG_VERSION")));
         value(ui, tr("Build date", "Datum sestavení"), &i18n::build_date());
-        card(ui, &p, |ui| {
-            row_layout(ui, 44.0, |ui| {
-                ui.label(RichText::new(tr("Contact", "Kontakt")).size(14.0).color(p.text));
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.label(RichText::new(CONTACT).size(14.0).color(p.text2));
+        // as the About page of HeMiDock: a title and the button, no descriptions
+        let open = |ui: &mut egui::Ui, title: &str, act: Act, acts: &mut Vec<Act>| {
+            card(ui, &p, |ui| {
+                row_layout(ui, 36.0, |ui| {
+                    ui.label(RichText::new(title).size(14.0).color(p.text));
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if Btn::new(tr("Open", "Otevřít")).show(ui, &p).clicked() {
+                            acts.push(act);
+                        }
+                    });
                 });
             });
-        });        card(ui, &p, |ui| {
-            row_layout(ui, 44.0, |ui| {
-                two_lines(ui, &p, tr("What's new", "Co je nového"), tr("The changes of every version and new downloads (in the browser)", "Změny každé verze a nové verze ke stažení (v prohlížeči)"));
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if Btn::new(tr("Open", "Otevřít")).show(ui, &p).clicked() {
-                        acts.push(Act::WhatsNew);
-                    }
-                });
-            });
-        });
-
-        card(ui, &p, |ui| {
-            row_layout(ui, 44.0, |ui| {
-                two_lines(ui, &p, tr("Licences", "Licence"), tr("Licences of the components used", "Licence použitých součástí"));
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if Btn::new(tr("Open", "Otevřít")).show(ui, &p).clicked() {
-                        acts.push(Act::Licences);
-                    }
-                });
-            });
-        });
+        };
+        open(ui, tr("Project on GitHub", "Projekt na GitHubu"), Act::OpenUrl(PROJECT), acts);
+        open(ui, tr("What's new", "Co je nového"), Act::OpenUrl(RELEASES), acts);
+        // HeMi Launcher on this PC: the updates are its job
+        if crate::launcher::exe().is_some() {
+            open(ui, tr("Updates in HeMi Launcher", "Aktualizace v HeMi Launcheru"), Act::Launcher, acts);
+        }
+        open(ui, tr("Report a problem", "Nahlásit problém"), Act::OpenUrl(CONTACT), acts);
+        open(ui, tr("Licences", "Licence"), Act::Licences, acts);
     }
 
     fn dialogs(&mut self, ctx: &egui::Context) {
@@ -1654,7 +1650,8 @@ impl HeMiPadApp {
                     }
                 }
                 Act::DismissToast => self.toast = None,
-                Act::WhatsNew => sys::open_url(RELEASES),
+                Act::OpenUrl(url) => sys::open_url(url),
+                Act::Launcher => crate::launcher::open(),
                 Act::Licences => {
                     let file = std::env::temp_dir().join("HeMiPad-ThirdPartyNotices.txt");
                     match std::fs::write(&file, include_str!("../assets/ThirdPartyNotices.txt")) {
@@ -1902,14 +1899,6 @@ fn item_if(ui: &mut egui::Ui, enabled: bool, text: &str, shortcut: &str, act: Ac
 /// An invisible check mark: keeps the texts of all menu items in one column.
 fn blank() -> RichText {
     RichText::new(CHECK.to_string()).font(theme::icon(12.0)).color(Color32::TRANSPARENT)
-}
-
-/// A menu item with a check box (empty / ticked in the accent colour), for a setting that is switched on or off.
-fn checkbox_item(ui: &mut egui::Ui, p: &Palette, on: bool, text: &str) -> bool {
-    // Segoe Fluent Icons: Checkbox (empty square) and CheckboxComposite (ticked square)
-    let (g, color) = if on { ('\u{E73A}', p.accent_text) } else { ('\u{E739}', p.text2) };
-    let mark = RichText::new(g.to_string()).font(theme::icon(14.0)).color(color);
-    ui.add(egui::Button::new((mark, text))).clicked()
 }
 
 /// A menu item with a check mark when `on`.

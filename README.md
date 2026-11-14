@@ -3,7 +3,7 @@
 [![Latest release](https://img.shields.io/github/v/release/Hemal1k/HeMiPad?label=release)](https://github.com/Hemal1k/HeMiPad/releases/latest) [![Downloads](https://img.shields.io/github/downloads/Hemal1k/HeMiPad/total)](https://github.com/Hemal1k/HeMiPad/releases) [![License: MIT](https://img.shields.io/github/license/Hemal1k/HeMiPad)](LICENSE) ![Windows 10 / 11](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)
 
 Everything of the classic Notepad – in the look of Windows 11, with **dark mode**, **colours for JSON and YAML**, line numbers and
-**spell check**. Small, fast and without any internet features. English and Czech.
+**spell check**. Small, fast and without any internet features.
 
 **[Download](https://github.com/Hemal1k/HeMiPad/releases/latest)** · [Project page](https://hemal1k.github.io/hemipad.html) · [Report a problem](https://github.com/Hemal1k/HeMiPad/issues)
 
@@ -15,10 +15,11 @@ Everything of the classic Notepad – in the look of Windows 11, with **dark mod
 
 | File | For |
 |---|---|
-| `HeMiPad-Setup.exe` | The installer – just for you (no administrator) or for all users (Program Files), with a Start menu entry and an uninstaller. |
-| `HeMiPad-Portable.zip` | Just the program; run it from any folder. |
+| `HeMiPad-Setup.exe` | The installer – just for you (no administrator) or for all users (Program Files), x64 or ARM64, with a Start menu entry and an uninstaller. |
+| `HeMiPad-Portable.zip` | Just the program for x64; run it from any folder. |
+| `HeMiPad-Portable-arm64.zip` | The same for Windows on ARM. |
 
-Windows 10 / 11, x64. Nothing else needs to be installed.
+Windows 10 / 11, x64 and ARM64. Nothing else needs to be installed.
 
 ## Features
 
@@ -27,12 +28,12 @@ Windows 10 / 11, x64. Nothing else needs to be installed.
 - **Edit**: undo / redo, find (F3 / Shift+F3), replace, go to line, select all, time and date (F5).
 - **View**: zoom (Ctrl+wheel), word wrap, status bar, line numbers, colours, spell check.
 - **Colours** for JSON, YAML, XML, INI / TOML and Markdown; Enter keeps the indentation, Tab / Shift+Tab on several lines.
-- **Spell check** with the dictionaries of Windows (Czech and English together, suggestions on right click).
+- **Spell check** with the dictionaries of Windows (the languages installed in Windows, suggestions on right click).
 - **Encodings**: UTF-8 with or without BOM, UTF-16 LE / BE, ANSI, OEM; line endings CRLF / LF / CR – in the status bar.
 - **.LOG** files get the time and date at their end, a file changed by another program is offered to reload.
 - **Settings**: theme (automatic / light / dark), language, and the optional File Explorer item “Open in HeMiPad”.
 
-HeMiPad never connects to the internet. Its settings are in `%AppData%\HeMiPad\settings.ini`.
+HeMiPad never connects to the internet. Its settings are in `%AppData%\HeMi\HeMiPad\settings.ini`.
 
 ## Building
 
@@ -62,7 +63,7 @@ runs without the Visual C++ Redistributable).
 | `src\settings.rs` | What HeMiPad remembers between runs. |
 | `src\shell_menu.rs` | The optional File Explorer item (`HKCU\Software\Classes`). |
 | `src\sys.rs` | Small Windows helpers: a new window, the time and date of F5, the font of the editor. |
-| `src\theme.rs`, `src\widgets.rs`, `src\i18n.rs` | The Windows 11 look in egui and the English / Czech texts. |
+| `src\theme.rs`, `src\widgets.rs`, `src\i18n.rs` | The Windows 11 look in egui and the texts in two languages. |
 | `assets` | The icon and the notices of the components. |
 
 ## License

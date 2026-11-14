@@ -7,6 +7,9 @@
 #ifndef AppExe
   #define AppExe "..\build\release\HeMiPad.exe"
 #endif
+#ifndef AppExeArm
+  #define AppExeArm ""
+#endif
 #ifndef OutputDir
   #define OutputDir "..\build\dist"
 #endif
@@ -26,8 +29,8 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ; the first page asks: for me only (default, no administrator) or for all users (Program Files, asks for administrator)
 PrivilegesRequiredOverridesAllowed=dialog commandline
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64compatible or arm64
+ArchitecturesInstallIn64BitMode=x64compatible or arm64
 MinVersion=10.0
 OutputDir={#OutputDir}
 OutputBaseFilename=HeMiPad-Setup
@@ -45,7 +48,13 @@ LicenseFile=..\LICENSE
 Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Files]
+; x64, and the ARM64 program on Windows on ARM when the installer has it
+#if AppExeArm != ""
+Source: "{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion; Check: not IsArm64
+Source: "{#AppExeArm}"; DestDir: "{app}"; DestName: "HeMiPad.exe"; Flags: ignoreversion; Check: IsArm64
+#else
 Source: "{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
+#endif
 
 [Tasks]
 ; offered on its own page, off by default
@@ -61,3 +70,21 @@ Filename: "{app}\HeMiPad.exe"; Description: "{cm:LaunchProgram,HeMiPad}"; Flags:
 [Registry]
 ; the File Explorer item the app writes when it is switched on: removed with the app
 Root: HKCU; Subkey: "Software\Classes\*\shell\HeMiPad"; Flags: uninsdeletekey dontcreatekey
+
+[Code]
+// Uninstalling: the settings of the app (%AppData%\HeMi\HeMiPad) are deleted or kept, as the user chooses (a quiet
+// uninstall keeps them). %AppData%\HeMi goes too when no other HeMi app has anything there.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Dir: String;
+begin
+  if CurUninstallStep <> usPostUninstall then Exit;
+  Dir := ExpandConstant('{userappdata}\HeMi\HeMiPad');
+  if not DirExists(Dir) then Exit;
+  if UninstallSilent then Exit;
+  if MsgBox('Delete the settings of HeMiPad too?' + #13#10#13#10 + 'Keep them to use them again when you install HeMiPad later.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+  begin
+    DelTree(Dir, True, True, True);
+    RemoveDir(ExpandConstant('{userappdata}\HeMi'));
+  end;
+end;

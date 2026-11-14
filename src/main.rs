@@ -4,6 +4,7 @@
 mod app;
 mod doc;
 mod i18n;
+mod launcher;
 mod print;
 mod settings;
 mod shell_menu;

@@ -54,10 +54,18 @@ impl Default for Settings {
     }
 }
 
+/// %AppData%\HeMi\HeMiPad\settings.ini – the settings of all HeMi apps are under %AppData%\HeMi; the folder of the older
+/// versions (%AppData%\HeMiPad) is moved there the first time.
 fn file() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("HeMiPad").join("settings.ini"))
+    let roaming = PathBuf::from(std::env::var_os("APPDATA")?);
+    let dir = roaming.join("HeMi").join("HeMiPad");
+    let old = roaming.join("HeMiPad");
+    if !dir.exists() && old.is_dir() {
+        let _ = std::fs::create_dir_all(roaming.join("HeMi"));
+        let _ = std::fs::rename(&old, &dir);
+    }
+    Some(dir.join("settings.ini"))
 }
-
 impl Settings {
     pub fn load() -> Settings {
         let mut s = Settings::default();

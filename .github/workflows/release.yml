@@ -19,7 +19,7 @@ jobs:
           ref: ${{ github.event.release.tag_name || github.ref }}
 
       - name: Rust
-        run: rustup toolchain install stable --profile minimal
+        run: rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
 
       - name: Inno Setup
         run: choco install innosetup --no-progress -y
@@ -43,4 +43,4 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" build/dist/HeMiPad-Setup.exe build/dist/HeMiPad-Portable.zip build/dist/SHA256SUMS.txt --clobber --repo "${{ github.repository }}"
+        run: gh release upload "${{ github.event.release.tag_name }}" build/dist/HeMiPad-Setup.exe build/dist/HeMiPad-Portable.zip build/dist/HeMiPad-Portable-arm64.zip build/dist/SHA256SUMS.txt --clobber --repo "${{ github.repository }}"
