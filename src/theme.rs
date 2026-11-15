@@ -229,6 +229,12 @@ pub fn read_source(mode: u8) -> Source {
         1 | 2 => mode as i32,
         _ => setting(&hemidock, "ThemeMode").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0),
     };
+    // Debug builds only: HEMI_THEME=light / dark for screenshots, without changing Windows
+    let theme_mode = match std::env::var("HEMI_THEME").ok().filter(|_| cfg!(debug_assertions)).as_deref() {
+        Some("light") => 1,
+        Some("dark") => 2,
+        _ => theme_mode,
+    };
     let light = match theme_mode {
         1 => true,
         2 => false,

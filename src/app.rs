@@ -1280,7 +1280,7 @@ impl HeMiPadApp {
         });
         ui.add_space(14.0);
         section(ui, &p, tr("File Explorer", "Průzkumník"));
-        row(ui, tr("“Open in HeMiPad” in the menu of files", "„Otevřít v HeMiPadu“ v nabídce souborů"), &mut |ui| {
+        row(ui, tr("Context menu", "Kontextová nabídka"), &mut |ui| {
             ui.label(RichText::new(if self.shell_menu { tr("On", "Zapnuto") } else { tr("Off", "Vypnuto") }).size(14.0).color(p.text));
             if toggle(ui, &p, self.shell_menu).clicked() {
                 acts.push(Act::ShellMenu);
@@ -1307,7 +1307,6 @@ impl HeMiPadApp {
         };
         value(ui, tr("Author", "Autor"), "Richard Hemala");
         value(ui, tr("Version", "Verze"), &format!("Beta {}", env!("CARGO_PKG_VERSION")));
-        value(ui, tr("Build date", "Datum sestavení"), &i18n::build_date());
         // the links side by side in one card (they wrap in the small window)
         let mut links: Vec<(&str, Act)> = vec![
             (tr("Project on GitHub", "Projekt na GitHubu"), Act::OpenUrl(PROJECT)),

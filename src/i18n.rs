@@ -63,16 +63,3 @@ pub fn tr<'a>(en: &'a str, cs: &'a str) -> &'a str {
     if cz() { cs } else { en }
 }
 
-/// The build date (YYYY-MM-DD from build.rs) as Czech or English write it.
-pub fn build_date() -> String {
-    let iso = env!("HEMIPAD_BUILD_DATE");
-    let mut parts = iso.split('-');
-    let (Some(y), Some(m), Some(d)) = (parts.next(), parts.next(), parts.next()) else { return iso.into() };
-    if cz() {
-        format!("{d}.{m}.{y}")
-    } else {
-        const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        let month = m.parse::<usize>().ok().and_then(|m| MONTHS.get(m.wrapping_sub(1))).copied().unwrap_or(m);
-        format!("{} {month} {y}", d.trim_start_matches('0'))
-    }
-}
