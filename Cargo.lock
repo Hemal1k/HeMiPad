@@ -726,7 +726,7 @@ dependencies = [
 
 [[package]]
 name = "hemipad"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "eframe",
  "raw-window-handle",

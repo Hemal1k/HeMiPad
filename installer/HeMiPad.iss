@@ -18,7 +18,7 @@
 AppId=HeMiPad
 AppName=HeMiPad
 AppVersion={#AppVersion}
-AppVerName=HeMiPad Beta {#AppVersion}
+AppVerName=HeMiPad {#AppVersion}
 AppPublisher=Richard Hemala
 AppPublisherURL=https://github.com/Hemal1k/HeMiPad
 AppSupportURL=https://github.com/Hemal1k/HeMiPad/issues

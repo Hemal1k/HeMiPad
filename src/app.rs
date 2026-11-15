@@ -1306,7 +1306,7 @@ impl HeMiPadApp {
             });
         };
         value(ui, tr("Author", "Autor"), "Richard Hemala");
-        value(ui, tr("Version", "Verze"), &format!("Beta {}", env!("CARGO_PKG_VERSION")));
+        value(ui, tr("Version", "Verze"), env!("CARGO_PKG_VERSION"));
         // the links side by side in one card (they wrap in the small window)
         let mut links: Vec<(&str, Act)> = vec![
             (tr("Project on GitHub", "Projekt na GitHubu"), Act::OpenUrl(PROJECT)),
