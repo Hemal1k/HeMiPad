@@ -70,6 +70,11 @@ Filename: "{app}\HeMiPad.exe"; Description: "{cm:LaunchProgram,HeMiPad}"; Flags:
 [Registry]
 ; the File Explorer item the app writes when it is switched on: removed with the app
 Root: HKCU; Subkey: "Software\Classes\*\shell\HeMiPad"; Flags: uninsdeletekey dontcreatekey
+; what Windows itself keeps about the app (its name in menus, "Open with")
+Root: HKCU; Subkey: "Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"; ValueType: none; ValueName: "{app}\HeMiPad.exe.FriendlyAppName"; Flags: uninsdeletevalue dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"; ValueType: none; ValueName: "{app}\HeMiPad.exe.ApplicationCompany"; Flags: uninsdeletevalue dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\Applications\HeMiPad.exe"; Flags: uninsdeletekey dontcreatekey
+Root: HKCU; Subkey: "Software\HeMi"; Flags: uninsdeletekeyifempty dontcreatekey
 
 [Code]
 // Uninstalling: the settings of the app (%AppData%\HeMi\HeMiPad) are deleted or kept, as the user chooses (a quiet

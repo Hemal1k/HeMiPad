@@ -900,7 +900,7 @@ impl HeMiPadApp {
             // as the settings of Windows 11 apps
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             // the settings open in the whole window (as in HeMi Launcher)
-            if Btn::new("").icon(glyph::SETTINGS).subtle().tip(tr("Settings", "Nastavení")).show(ui, &p).clicked() {
+            if Btn::new("").icon(glyph::SETTINGS).subtle().show(ui, &p).clicked() {
                 acts.push(Act::About(true));
             }
             });
@@ -1243,7 +1243,7 @@ impl HeMiPadApp {
         let p = self.p;
         ui.horizontal(|ui| {
             ui.set_min_height(40.0);
-            if Btn::new("").icon(glyph::BACK).subtle().tip(tr("Back", "Zpět")).show(ui, &p).clicked() {
+            if Btn::new("").icon(glyph::BACK).subtle().show(ui, &p).clicked() {
                 acts.push(Act::About(false));
             }
             ui.add_space(4.0);
