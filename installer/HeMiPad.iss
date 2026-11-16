@@ -23,7 +23,8 @@ AppPublisher=Richard Hemala
 AppPublisherURL=https://github.com/Hemal1k/HeMiPad
 AppSupportURL=https://github.com/Hemal1k/HeMiPad/issues
 AppUpdatesURL=https://github.com/Hemal1k/HeMiPad/releases
-DefaultDirName={autopf}\HeMiPad
+DefaultDirName={autopf}\HeMi\HeMiPad
+UsePreviousAppDir=no
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -65,6 +66,8 @@ Name: "{autoprograms}\HeMiPad"; Filename: "{app}\HeMiPad.exe"
 Name: "{autodesktop}\HeMiPad"; Filename: "{app}\HeMiPad.exe"; Tasks: desktopicon
 
 [Run]
+; the File Explorer items and the start with Windows point to this installation (also after a move from the old folder)
+Filename: "{app}\HeMiPad.exe"; Parameters: "--repair"; Flags: runasoriginaluser waituntilterminated runhidden
 Filename: "{app}\HeMiPad.exe"; Description: "{cm:LaunchProgram,HeMiPad}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Registry]
@@ -77,6 +80,52 @@ Root: HKCU; Subkey: "Software\Classes\Applications\HeMiPad.exe"; Flags: uninsdel
 Root: HKCU; Subkey: "Software\HeMi"; Flags: uninsdeletekeyifempty dontcreatekey
 
 [Code]
+// Since 2026-11 the HeMi apps go into one folder HeMi, as their settings do (%AppData%\HeMi\<app>): {autopf}\HeMi\HeMiPad.
+// An installation in the old folder {autopf}\HeMiPad moves: the app running from there ends, the new version goes into the
+// new folder ("--repair" points the File Explorer items and the start with Windows to it) and the old folder is deleted.
+var
+  OldFolder: String;
+
+function FindOldFolder: String;
+begin
+  if RegQueryStringValue(HKA, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\HeMiPad_is1', 'InstallLocation', Result) then
+  begin
+    Result := RemoveBackslashUnlessRoot(Result);
+    if (CompareText(Result, ExpandConstant('{app}')) = 0) or (CompareText(ExtractFileName(Result), 'HeMiPad') <> 0)
+      or not FileExists(Result + '\HeMiPad.exe') then
+      Result := '';
+  end
+  else
+    Result := '';
+end;
+
+procedure StopOld;
+var
+  Code: Integer;
+begin
+  OldFolder := FindOldFolder;
+  if OldFolder = '' then Exit;
+  Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoProfile -NonInteractive -Command "Get-Process | Where-Object { $_.Path -like ''' + OldFolder + '\*'' } | Stop-Process -Force"',
+    '', SW_HIDE, ewWaitUntilTerminated, Code);
+end;
+
+procedure DeleteOld;
+begin
+  if OldFolder <> '' then DelTree(OldFolder, True, True, True);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  StopOld;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then DeleteOld;
+end;
+
 // Uninstalling: the settings of the app (%AppData%\HeMi\HeMiPad) are deleted or kept, as the user chooses (a quiet
 // uninstall keeps them). %AppData%\HeMi goes too when no other HeMi app has anything there.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

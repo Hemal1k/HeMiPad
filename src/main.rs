@@ -22,6 +22,11 @@ fn main() -> eframe::Result {
     let file: Option<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).find(|a| !a.as_os_str().is_empty());
     let s = settings::Settings::load();
     i18n::set(s.language);
+    // the installer after an installation or a move to another folder: the File Explorer item points to this exe
+    if file.as_deref().and_then(|f| f.to_str()) == Some("--repair") {
+        shell_menu::repair();
+        return Ok(());
+    }
     shell_menu::repair();
 
     let icon = egui::IconData { rgba: include_bytes!("../assets/HeMiPad-64.rgba").to_vec(), width: 64, height: 64 };
