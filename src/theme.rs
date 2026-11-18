@@ -1,8 +1,8 @@
 //! The look of HeMiDock (WinUI 3 / Fluent) in egui: the colours of the Windows 11 theme, the accent colour,
 //! Segoe UI Variable and Segoe Fluent Icons, the title bar in the colour of the window.
 //!
-//! Light / dark and the accent follow the settings of HeMiDock (%AppData%\HeMiDock\settings.json:
-//! ThemeMode 0 = Windows, 1 = light, 2 = dark; AccentMode 0 = Windows, 1 = AccentColor), else Windows.
+//! Light / dark and the accent: the own setting of the app, else Windows (no longer the settings of HeMiDock – they
+//! they changed every HeMi app at once).
 
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, FontId, Stroke, TextStyle};
 use eframe::epaint::text::VariationCoords;
@@ -221,10 +221,9 @@ fn shades(base: Color32) -> [Color32; 7] {
 
 /// `mode`: the choice in HeMiPad's settings – 0 = automatic (HeMiDock's setting, else Windows), 1 = light, 2 = dark.
 pub fn read_source(mode: u8) -> Source {
-    let hemidock = std::env::var("APPDATA")
-        .ok()
-        .and_then(|d| std::fs::read_to_string(format!(r"{d}\HeMi\HeMiDock\settings.json")).or_else(|_| std::fs::read_to_string(format!(r"{d}\HeMiDock\settings.json"))).ok())
-        .unwrap_or_default();
+    // each app has its own look (the user, 2026-11-19: the theme of HeMiDock changed HeMi Launcher too): the settings of
+    // HeMiDock are not read any more – "as Windows" is the light / dark mode and the accent colour of Windows
+    let hemidock = String::new();
     let theme_mode = match mode {
         1 | 2 => mode as i32,
         _ => setting(&hemidock, "ThemeMode").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0),
