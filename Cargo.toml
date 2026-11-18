@@ -1,6 +1,6 @@
 [package]
 name = "hemipad"
-version = "1.2.3"
+version = "1.2.4"
 edition = "2024"
 description = "HeMiPad – a fast, simple text editor"
 authors = ["Richard Hemala"]
