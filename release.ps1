@@ -1,7 +1,7 @@
 # Builds the downloads of a HeMiPad release - the same on a PC and in the GitHub workflow (.github/workflows/release.yml):
 #   build\dist\HeMiPad-Setup.exe            the installer (Inno Setup 6): x64, and the ARM64 program on Windows on ARM
-#   build\dist\HeMiPad-Portable.zip         just the program for x64 - the exe right in the zip
-#   build\dist\HeMiPad-Portable-arm64.zip   the same for Windows on ARM
+#   build\dist\HeMiPad-Portable.exe         just the program for x64 (one file, no zip around it)
+#   build\dist\HeMiPad-Portable-arm64.exe   the same for Windows on ARM
 # Needs: Rust (stable, MSVC), Inno Setup 6, and for ARM64 the MSVC ARM64 build tools (on a PC without them ARM64 is
 # left out with a warning; the GitHub workflow always builds both). The version comes from Cargo.toml.
 param([switch]$NoArm)
@@ -45,10 +45,10 @@ if ($exes['arm64']) { $isccArgs += "/DAppExeArm=$($exes['arm64'])" }
 & $iscc @isccArgs (Join-Path $root "installer\$app.iss")
 if ($LASTEXITCODE) { throw 'The installer could not be made.' }
 
-# the portable zips: the exe right inside, no folder around it
+# the portable versions: the program itself, one file - no zip around it
 foreach ($arch in $exes.Keys) {
-    $zip = if ($arch -eq 'x64') { "$dist\$app-Portable.zip" } else { "$dist\$app-Portable-$arch.zip" }
-    Compress-Archive -Path $exes[$arch] -DestinationPath $zip
+    $portable = if ($arch -eq 'x64') { "$dist\$app-Portable.exe" } else { "$dist\$app-Portable-$arch.exe" }
+    Copy-Item $exes[$arch] $portable
 }
 
 Get-ChildItem $dist | ForEach-Object { Write-Host ("  {0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB)) }
