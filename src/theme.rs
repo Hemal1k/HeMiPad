@@ -2,7 +2,7 @@
 //! Segoe UI Variable and Segoe Fluent Icons, the title bar in the colour of the window.
 //!
 //! Light / dark and the accent: the own setting of the app, else Windows (no longer the settings of HeMiDock – they
-//! they changed every HeMi app at once).
+//! changed every HeMi app at once).
 
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, FontId, Stroke, TextStyle};
 use eframe::epaint::text::VariationCoords;
