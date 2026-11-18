@@ -40,7 +40,10 @@ UninstallDisplayIcon={app}\HeMiPad.exe
 UninstallDisplayName=HeMiPad
 Compression=lzma2/max
 SolidCompression=yes
-WizardStyle=modern
+; the look of Windows 11, light or dark as Windows, and as big as the first question of the installer (it was
+; smaller and old-looking next to it, 2026-11-19)
+WizardStyle=modern dynamic windows11
+WizardSizePercent=120
 CloseApplications=force
 LicenseFile=..\LICENSE
 
