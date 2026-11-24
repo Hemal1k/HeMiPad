@@ -148,7 +148,8 @@ unsafe fn print_to(hdc: HDC, title: &str, text: &str, font: &FontChoice, m: [i32
         let body_bottom = bottom - lh * 2;
         let width = right - left;
         let mut page = 0;
-        let mut y = i32::MAX;
+        // at the bottom: the first line starts the first page (i32::MAX + lh would overflow)
+        let mut y = body_bottom;
         let centered = |s: &[u16], y: i32| {
             let mut sz = std::mem::zeroed();
             GetTextExtentPoint32W(hdc, s.as_ptr(), s.len() as i32, &mut sz);

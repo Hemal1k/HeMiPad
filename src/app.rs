@@ -1,13 +1,13 @@
 //! The window of HeMiPad: the menu bar, the find bar, the editor, the status bar and the dialogs.
-//! It does everything the classic Notepad does, plus colours for JSON / YAML / XML / INI / Markdown,
-//! line numbers, JSON formatting and the spell checker of Windows.
+//! It does everything the classic Notepad does, plus colors for JSON / YAML / XML / INI / Markdown,
+//! line numbers and the spell checker of Windows.
 //!
 //! Light on the system: nothing is drawn while nobody does anything (the cursor does not blink,
-//! the theme is checked only when something happens), the colouring of the text is cached,
+//! the theme is checked only when something happens), the coloring of the text is cached,
 //! and the spelling is checked on a thread of its own a while after typing stops.
 
 use crate::doc::{self, Encoding, Eol};
-use crate::i18n::{self, tr};
+use crate::i18n::{self, plural, tr};
 use crate::settings::Settings;
 use crate::spell::{self, Reply, Spell};
 use crate::syntax::{self, Colors, Lang};
@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
-/// Problems and ideas: the Issues of the project on GitHub – shown as text only (HeMiPad opens nothing on the internet).
+/// Problems and ideas: the Issues of the project on GitHub – opened in the default browser on a click (HeMiPad itself never goes online).
 const CONTACT: &str = "https://github.com/Hemal1k/HeMiPad/issues";
 const PROJECT: &str = "https://github.com/Hemal1k/HeMiPad";
 const RELEASES: &str = "https://github.com/Hemal1k/HeMiPad/releases";
@@ -738,7 +738,7 @@ impl HeMiPadApp {
             None => {
                 self.spell_failed = true;
                 self.toast(
-                    tr("Windows has no spell checker for Czech or English.", "Windows nemá kontrolu pravopisu pro češtinu ani angličtinu."),
+                    tr("Windows has no spell checking dictionary for Czech or English.", "Windows nemá slovník kontroly pravopisu pro češtinu ani angličtinu."),
                     Tone::Caution,
                 );
                 false
@@ -763,7 +763,7 @@ impl HeMiPadApp {
         }
     }
 
-    /// The background of the window: transparent where Windows 11 shows Mica, else the colour of the theme.
+    /// The background of the window: transparent where Windows 11 shows Mica, else the color of the theme.
     fn backdrop(&self) -> Color32 {
         if self.mica { Color32::TRANSPARENT } else { self.p.bg }
     }
@@ -878,13 +878,13 @@ impl HeMiPadApp {
                 if check_item(ui, &p, self.s.line_numbers, tr("Line numbers", "Čísla řádků"), "Ctrl+L") {
                     acts.push(Act::LineNumbers);
                 }
-                if check_item(ui, &p, self.s.syntax, tr("Colours (JSON, YAML, XML…)", "Barvy (JSON, YAML, XML…)"), "") {
+                if check_item(ui, &p, self.s.syntax, tr("Colors (JSON, YAML, XML…)", "Barvy (JSON, YAML, XML…)"), "") {
                     acts.push(Act::Syntax);
                 }
                 // the languages are known only while the checker runs (it is started only when needed)
                 let tip = match &self.spell {
                     Some(sp) => format!("{}: {}", tr("Dictionaries of Windows", "Slovníky Windows"), sp.langs.join(", ")),
-                    None if self.spell_failed => tr("Windows has no spell checker for Czech or English.", "Windows nemá kontrolu pravopisu pro češtinu ani angličtinu.").to_string(),
+                    None if self.spell_failed => tr("Windows has no spell checking dictionary for Czech or English.", "Windows nemá slovník kontroly pravopisu pro češtinu ani angličtinu.").to_string(),
                     None => tr("Czech and English, with the dictionaries of Windows.", "Čeština a angličtina, se slovníky Windows.").to_string(),
                 };
                 let resp = ui.add(egui::Button::new((
@@ -921,7 +921,7 @@ impl HeMiPadApp {
         };
         ui.horizontal(|ui| {
             ui.set_min_height(34.0);
-            let tip = if f.show_replace { tr("Hide Replace", "Skrýt nahrazení") } else { tr("Replace", "Nahradit") };
+            let tip = if f.show_replace { tr("Hide replace", "Skrýt nahrazení") } else { tr("Replace", "Nahradit") };
             if Btn::new("").icon(if f.show_replace { glyph::CHEVRON_DOWN } else { glyph::CHEVRON_RIGHT }).subtle().tip(tip).show(ui, &p).clicked() {
                 f.show_replace = !f.show_replace;
             }
@@ -941,7 +941,7 @@ impl HeMiPadApp {
                 acts.push(Act::FindNext(false));
             }
             ui.add_space(6.0);
-            ui.checkbox(&mut self.s.match_case, tr("Match case", "Rozlišovat velká a malá"));
+            ui.checkbox(&mut self.s.match_case, tr("Match case", "Rozlišovat malá a velká písmena"));
             ui.checkbox(&mut self.s.wrap_around, tr("Wrap around", "Hledat dokola"));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if Btn::new("").icon(glyph::CLOSE).subtle().tip(tr("Close (Esc)", "Zavřít (Esc)")).show(ui, &p).clicked() {
@@ -996,14 +996,22 @@ impl HeMiPadApp {
             sep(ui, &p);
             let n = group_digits(self.stats.chars);
             let chars = if self.selection.is_empty() {
-                tr("{n} characters", "{n} znaků").replace("{n}", &n)
+                tr(
+                    plural(self.stats.chars, "{n} character", "{n} characters", "{n} characters"),
+                    plural(self.stats.chars, "{n} znak", "{n} znaky", "{n} znaků"),
+                )
+                .replace("{n}", &n)
             } else {
-                tr("{s} of {n} characters", "{s} z {n} znaků").replace("{s}", &group_digits(self.selection.len())).replace("{n}", &n)
+                tr(
+                    plural(self.stats.chars, "{s} of {n} character", "{s} of {n} characters", "{s} of {n} characters"),
+                    plural(self.stats.chars, "{s} z {n} znaku", "{s} z {n} znaků", "{s} z {n} znaků"),
+                )
+                .replace("{s}", &group_digits(self.selection.len())).replace("{n}", &n)
             };
             ui.label(small(chars));
             if self.spell_on() && self.wrong_rev == self.rev && !self.wrong.is_empty() {
                 sep(ui, &p);
-                ui.label(RichText::new(tr("{n} misspelled", "{n} chyb").replace("{n}", &self.wrong.len().to_string())).size(12.0).color(p.critical));
+                ui.label(RichText::new(tr("{n} misspelled", plural(self.wrong.len(), "{n} chyba", "{n} chyby", "{n} chyb")).replace("{n}", &self.wrong.len().to_string())).size(12.0).color(p.critical));
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.add_space(6.0);
@@ -1279,7 +1287,7 @@ impl HeMiPadApp {
             }
         });
         ui.add_space(14.0);
-        section(ui, &p, tr("File Explorer", "Průzkumník"));
+        section(ui, &p, tr("File Explorer", "Průzkumník souborů"));
         row(ui, tr("Context menu", "Kontextová nabídka"), &mut |ui| {
             ui.label(RichText::new(if self.shell_menu { tr("On", "Zapnuto") } else { tr("Off", "Vypnuto") }).size(14.0).color(p.text));
             if toggle(ui, &p, self.shell_menu).clicked() {
@@ -1310,9 +1318,9 @@ impl HeMiPadApp {
         // the links side by side in one card (they wrap in the small window)
         let mut links: Vec<(&str, Act)> = vec![
             (tr("Project on GitHub", "Projekt na GitHubu"), Act::OpenUrl(PROJECT)),
-            (tr("What's new", "Co je nového"), Act::OpenUrl(RELEASES)),
+            (tr("What’s new", "Co je nového"), Act::OpenUrl(RELEASES)),
             (tr("Report a problem", "Nahlásit problém"), Act::OpenUrl(CONTACT)),
-            (tr("Licences", "Licence"), Act::Licences),
+            (tr("Licenses", "Licence"), Act::Licences),
         ];
         // HeMi Launcher on this PC: the updates are its job
         if crate::launcher::exe().is_some() {
@@ -1335,13 +1343,13 @@ impl HeMiPadApp {
         let (title, text): (String, String) = match d {
             Dialog::SaveChanges(_) => (
                 "HeMiPad".into(),
-                tr("Do you want to save changes to {name}?", "Chcete uložit změny do souboru {name}?").replace("{name}", &name),
+                tr("Do you want to save changes to {name}?", "Uložit změny do souboru {name}?").replace("{name}", &name),
             ),
             Dialog::Reload => (
                 tr("The file was changed", "Soubor byl změněn").into(),
                 tr(
-                    "Another program changed {name}. Load it again and lose your changes here?",
-                    "Jiný program změnil soubor {name}. Načíst ho znovu a zahodit změny tady?",
+                    "Another program changed {name}. Reload it and discard your unsaved changes?",
+                    "Jiný program změnil soubor {name}. Načíst ho znovu a zahodit neuložené změny?",
                 )
                 .replace("{name}", &name),
             ),
@@ -1350,15 +1358,15 @@ impl HeMiPadApp {
                 tr("No printer", "Žádná tiskárna").into(),
                 tr(
                     "Windows has no printer, so there is nothing to print to or set up. Add a printer in Windows Settings → Bluetooth & devices → Printers & scanners.",
-                    "Ve Windows není žádná tiskárna, takže není kam tisknout ani co nastavit. Tiskárnu přidáte v Nastavení Windows → Bluetooth a zařízení → Tiskárny a skenery.",
+                    "Ve Windows není žádná tiskárna, takže není kam tisknout ani co nastavit. Tiskárnu přidáš v Nastavení Windows → Bluetooth a zařízení → Tiskárny a skenery.",
                 )
                 .into(),
             ),
         };
         let buttons: Vec<&str> = match d {
             Dialog::NoPrinter => vec![tr("OK", "OK")],
-            Dialog::SaveChanges(_) => vec![tr("Save", "Uložit"), tr("Don't save", "Neukládat"), tr("Cancel", "Zrušit")],
-            Dialog::Reload => vec![tr("Load again", "Načíst znovu"), tr("Keep mine", "Ponechat moje")],
+            Dialog::SaveChanges(_) => vec![tr("Save", "Uložit"), tr("Don’t save", "Neukládat"), tr("Cancel", "Zrušit")],
+            Dialog::Reload => vec![tr("Reload", "Načíst znovu"), tr("Keep my version", "Ponechat moji verzi")],
             Dialog::GoTo(_) => vec![tr("Go to", "Přejít"), tr("Cancel", "Zrušit")],
         };
         let mut choice: Option<usize> = None;
@@ -1446,7 +1454,7 @@ impl HeMiPadApp {
                             self.select(ctx, ch..ch);
                         }
                         _ => {
-                            self.toast(tr("The line number is beyond the number of lines.", "Číslo řádku je mimo rozsah řádků."), Tone::Caution);
+                            self.toast(tr("The line number is out of range.", "Takový řádek v souboru není."), Tone::Caution);
                         }
                     }
                 }
@@ -1469,7 +1477,7 @@ impl HeMiPadApp {
             self.load(ctx, &path, Some(self.enc));
             let n = keep.min(self.text.chars().count());
             self.select(ctx, n..n);
-            self.toast(tr("Another program changed the file – loaded again.", "Jiný program soubor změnil – načten znovu."), Tone::Success);
+            self.toast(tr("Another program changed the file – it was reloaded.", "Jiný program soubor změnil – byl znovu načten."), Tone::Success);
         }
     }
 
@@ -1590,7 +1598,7 @@ impl HeMiPadApp {
                                 "„Otevřít v HeMiPadu“ je v nabídce souborů (ve Windows 11 pod „Zobrazit další možnosti“).",
                             )
                         } else {
-                            tr("The item was removed from the File Explorer menu.", "Položka byla z nabídky Průzkumníka odebrána.")
+                            tr("The item was removed from the File Explorer menu.", "Položka byla z nabídky Průzkumníka souborů odebrána.")
                         };
                         self.toast(text, Tone::Success);
                     }
@@ -1625,7 +1633,7 @@ impl HeMiPadApp {
                     let file = std::env::temp_dir().join("HeMiPad-ThirdPartyNotices.txt");
                     match std::fs::write(&file, include_str!("../assets/ThirdPartyNotices.txt")) {
                         Ok(()) => sys::new_window(Some(&file)),
-                        Err(e) => self.toast(format!("{}: {e}", tr("The licences cannot be opened", "Licence nejde otevřít")), Tone::Critical),
+                        Err(e) => self.toast(format!("{}: {e}", tr("The licenses cannot be opened", "Licence nejde otevřít")), Tone::Critical),
                     }
                 }
                 Act::SpellReplace(r, w) => {

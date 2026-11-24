@@ -1,5 +1,5 @@
-//! Colouring of JSON, YAML, XML, INI / TOML and Markdown. Simple scanners: they only colour,
-//! they never change the text, and a broken file just gets fewer colours.
+//! Coloring of JSON, YAML, XML, INI / TOML and Markdown. Simple scanners: they only color,
+//! they never change the text, and a broken file just gets fewer colors.
 
 use crate::i18n::tr;
 use eframe::egui::{Color32, FontId, TextFormat, text::ByteIndex, text::LayoutJob, text::LayoutSection};
@@ -69,7 +69,7 @@ pub enum Kind {
     Heading,
 }
 
-/// The colours of the kinds, after VS Code (Dark+ / Light+), which people know.
+/// The colors of the kinds, after VS Code (Dark+ / Light+), which people know.
 #[derive(Clone, Copy, PartialEq, Hash)]
 pub struct Colors {
     text: Color32,
@@ -136,7 +136,7 @@ impl Colors {
     }
 }
 
-/// The text laid out with colours. `wrap` = the width to wrap at (infinite = no wrapping).
+/// The text laid out with colors. `wrap` = the width to wrap at (infinite = no wrapping).
 pub fn layout_job(text: &str, lang: Lang, font: FontId, colors: &Colors, wrap: f32) -> LayoutJob {
     let spans = if lang == Lang::Plain || text.len() > 8_000_000 { Vec::new() } else { spans(lang, text) };
     let mut job = LayoutJob { text: text.to_string(), ..Default::default() };
@@ -148,7 +148,7 @@ pub fn layout_job(text: &str, lang: Lang, font: FontId, colors: &Colors, wrap: f
         if range.is_empty() {
             return;
         }
-        // neighbours in the same colour become one section
+        // neighbors in the same color become one section
         if let Some(last) = job.sections.last_mut()
             && last.byte_range.end == ByteIndex(range.start)
             && last.format.color == colors.of(k)
@@ -174,7 +174,7 @@ pub fn layout_job(text: &str, lang: Lang, font: FontId, colors: &Colors, wrap: f
     job
 }
 
-/// Coloured byte ranges, sorted and not overlapping. Ranges only start and end at ASCII bytes,
+/// Colored byte ranges, sorted and not overlapping. Ranges only start and end at ASCII bytes,
 /// so they are always on character boundaries.
 fn spans(lang: Lang, text: &str) -> Vec<(Range<usize>, Kind)> {
     let mut out = Vec::new();

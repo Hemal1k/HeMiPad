@@ -1,5 +1,5 @@
 //! Languages: English; Czech when the display language of Windows is Czech.
-//! The user can also pick the language by hand (View → Language), which is remembered.
+//! The user can also pick the language by hand (Settings → Language), which is remembered.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 use windows_sys::Win32::Globalization::GetUserDefaultUILanguage;
@@ -63,3 +63,13 @@ pub fn tr<'a>(en: &'a str, cs: &'a str) -> &'a str {
     if cz() { cs } else { en }
 }
 
+
+/// The form for a count, by the Czech rules: 1 → `one`, 2–4 → `few`, anything else → `many`
+/// ("1 znak", "3 znaky", "5 znaků"). For English give the plural as both `few` and `many`.
+pub fn plural<'a>(n: usize, one: &'a str, few: &'a str, many: &'a str) -> &'a str {
+    match n {
+        1 => one,
+        2..=4 => few,
+        _ => many,
+    }
+}

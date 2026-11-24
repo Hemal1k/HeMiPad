@@ -217,8 +217,85 @@ pub fn encode(text: &str, enc: Encoding, eol: Eol) -> (Vec<u8>, bool) {
 /// Writes the file; true when some characters could not be written in the encoding.
 pub fn save(path: &Path, text: &str, enc: Encoding, eol: Eol) -> std::io::Result<bool> {
     let (bytes, lossy) = encode(text, enc, eol);
-    std::fs::write(path, bytes)?;
+    write_atomic(path, &bytes)?;
     Ok(lossy)
+}
+
+/// Writes the bytes so that a crash, a power cut or a full disk never leaves a half-written file:
+/// first into a temporary file in the same folder, then it replaces the file (ReplaceFileW keeps
+/// the attributes, the permissions and the creation time). A link is written in place as before.
+fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::fs::OpenOptions;
+    use std::io::{ErrorKind, Write};
+
+    let exists = match std::fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_symlink() => return std::fs::write(path, bytes),
+        Ok(_) => true,
+        Err(e) if e.kind() == ErrorKind::NotFound => false,
+        Err(_) => return std::fs::write(path, bytes),
+    };
+    if exists {
+        // the same error as before for a read-only, locked or protected file (nothing is changed)
+        OpenOptions::new().write(true).open(path)?;
+    }
+
+    let dir = match path.parent() {
+        Some(d) if !d.as_os_str().is_empty() => d,
+        _ => Path::new("."),
+    };
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let mut tmp = None;
+    for i in 0..100u32 {
+        let p = dir.join(format!(".{name}.{}-{i}.hemipad-tmp", std::process::id()));
+        match OpenOptions::new().write(true).create_new(true).open(&p) {
+            Ok(f) => {
+                tmp = Some((p, f));
+                break;
+            }
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
+            Err(_) => break,
+        }
+    }
+    // no temporary file in the folder (no right to create files there): write directly as before
+    let Some((tmp, mut f)) = tmp else { return std::fs::write(path, bytes) };
+
+    let written = f.write_all(bytes).and_then(|_| f.sync_all());
+    drop(f);
+    if let Err(e) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    if !replace_with(path, &tmp, exists) {
+        // e.g. a file system without ReplaceFileW: the direct write as before
+        let _ = std::fs::remove_file(&tmp);
+        return std::fs::write(path, bytes);
+    }
+    Ok(())
+}
+
+/// Puts `tmp` in place of `path`; false when it did not work (then `tmp` is still there or gone).
+fn replace_with(path: &Path, tmp: &Path, exists: bool) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_WRITE_THROUGH, MoveFileExW, REPLACEFILE_IGNORE_MERGE_ERRORS, ReplaceFileW,
+    };
+    let w = |p: &Path| p.as_os_str().encode_wide().chain(Some(0)).collect::<Vec<u16>>();
+    let (target, source) = (w(path), w(tmp));
+    unsafe {
+        if exists {
+            ReplaceFileW(
+                target.as_ptr(),
+                source.as_ptr(),
+                std::ptr::null(),
+                REPLACEFILE_IGNORE_MERGE_ERRORS,
+                std::ptr::null(),
+                std::ptr::null(),
+            ) != 0
+        } else {
+            // a new file: just rename (without replacing a file that appeared in the meantime)
+            MoveFileExW(source.as_ptr(), target.as_ptr(), MOVEFILE_WRITE_THROUGH) != 0
+        }
+    }
 }
 
 /// When the file was last written (to notice changes made by another program).
@@ -244,5 +321,52 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn temp_folder(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("hemipad-test-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn leftovers(dir: &Path) -> usize {
+        std::fs::read_dir(dir)
+            .unwrap()
+            .filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().ends_with(".hemipad-tmp"))
+            .count()
+    }
+
+    #[test]
+    fn save_new_and_overwrite() {
+        let dir = temp_folder("save");
+        let file = dir.join("a.txt");
+        // a new file
+        assert!(!save(&file, "one\ntwo", Encoding::Utf8, Eol::CrLf).unwrap());
+        assert_eq!(std::fs::read(&file).unwrap(), b"one\r\ntwo");
+        // over an existing, longer file
+        std::fs::write(&file, "a much longer content than the new one").unwrap();
+        save(&file, "x", Encoding::Utf8, Eol::Lf).unwrap();
+        assert_eq!(std::fs::read(&file).unwrap(), b"x");
+        assert_eq!(leftovers(&dir), 0);
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn save_read_only_fails() {
+        let dir = temp_folder("ro");
+        let file = dir.join("ro.txt");
+        std::fs::write(&file, "keep").unwrap();
+        let mut p = std::fs::metadata(&file).unwrap().permissions();
+        p.set_readonly(true);
+        std::fs::set_permissions(&file, p.clone()).unwrap();
+        assert!(save(&file, "new", Encoding::Utf8, Eol::Lf).is_err());
+        assert_eq!(std::fs::read(&file).unwrap(), b"keep");
+        assert_eq!(leftovers(&dir), 0);
+        #[allow(clippy::permissions_set_readonly_false)]
+        p.set_readonly(false);
+        std::fs::set_permissions(&file, p).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

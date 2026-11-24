@@ -1,15 +1,15 @@
 HeMiPad – third-party notices
 =============================
 
-HeMiPad is written in Rust and uses the following libraries (crates.io). All of them are under free licences
-(mostly MIT or Apache-2.0); the full licence texts are on https://crates.io and in the repository of each library.
-Where a library offers a choice of licences ("A OR B"), HeMiPad uses it under the MIT licence where offered.
+HeMiPad is written in Rust and uses the following libraries (crates.io). All of them are under free licenses
+(mostly MIT or Apache-2.0); the full license texts are on https://crates.io and in the repository of each library.
+Where a library offers a choice of licenses ("A OR B"), HeMiPad uses it under the MIT license where offered.
 
 HeMiPad does not ship the fonts Segoe UI Variable, Segoe Fluent Icons and Consolas – it loads them from Windows
 (C:\Windows\Fonts). The default fonts of egui (epaint_default_fonts) are under OFL-1.1 and the Ubuntu Font Licence 1.0.
 Spelling uses the spell checker and the dictionaries of Windows; HeMiPad ships no dictionary.
 
-Library                                Licence
+Library                                License
 -------------------------------------- ----------------------------------------
 accesskit v0.25.2                      MIT OR Apache-2.0
 adler2 v2.0.1                          0BSD OR MIT OR Apache-2.0

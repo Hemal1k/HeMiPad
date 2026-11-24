@@ -1,4 +1,4 @@
-//! What HeMiPad remembers between runs, in %AppData%\HeMiPad\settings.ini (lines "key=value").
+//! What HeMiPad remembers between runs, in %AppData%\HeMi\HeMiPad\settings.ini (lines "key=value").
 
 use crate::i18n::Choice;
 use crate::sys::FontChoice;
@@ -8,7 +8,7 @@ use std::path::PathBuf;
 pub struct Settings {
     /// The language of the app: as Windows (English, or Czech on a Czech Windows), or picked by hand.
     pub language: Choice,
-    /// 0 = automatic (as HeMiDock / Windows), 1 = light, 2 = dark.
+    /// 0 = automatic (as Windows), 1 = light, 2 = dark.
     pub theme: u8,
     pub word_wrap: bool,
     pub status_bar: bool,

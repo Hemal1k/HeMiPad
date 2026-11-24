@@ -1,5 +1,5 @@
 ﻿; HeMiPad installer (Inno Setup 6), built by release.ps1:  ISCC /DAppVersion=1.1.0 /DAppExe=<HeMiPad.exe> /DOutputDir=<folder>
-; For the current user (no administrator) or for all users - the installer asks. Uninstalling removes the File Explorer item of the app as well.
+; For the current user (no administrator) or for all users – the installer asks. Uninstalling removes the File Explorer item of the app as well.
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
@@ -46,10 +46,17 @@ WizardStyle=modern dynamic windows11
 WizardSizePercent=120
 CloseApplications=force
 LicenseFile=..\LICENSE
+; the language of Windows without asking (English when Windows is neither in English nor in Czech)
+ShowLanguageDialog=auto
 
 [Languages]
-; English only
+; English, and Czech when Windows is in Czech
 Name: "en"; MessagesFile: "compiler:Default.isl"
+Name: "cs"; MessagesFile: "compiler:Languages\Czech.isl"
+
+[CustomMessages]
+en.DeleteSettings=Delete the settings of HeMiPad too?%n%nKeep them to use them again when you install HeMiPad later.
+cs.DeleteSettings=Smazat i nastavení HeMiPadu?%n%nKdyž ho necháš, použije se znovu při další instalaci HeMiPadu.
 
 [Files]
 ; x64, and the ARM64 program on Windows on ARM when the installer has it
@@ -69,7 +76,7 @@ Name: "{autoprograms}\HeMiPad"; Filename: "{app}\HeMiPad.exe"
 Name: "{autodesktop}\HeMiPad"; Filename: "{app}\HeMiPad.exe"; Tasks: desktopicon
 
 [Run]
-; the File Explorer items and the start with Windows point to this installation (also after a move from the old folder)
+; the File Explorer item points to this installation (also after a move from the old folder)
 Filename: "{app}\HeMiPad.exe"; Parameters: "--repair"; Flags: runasoriginaluser waituntilterminated runhidden
 Filename: "{app}\HeMiPad.exe"; Description: "{cm:LaunchProgram,HeMiPad}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
@@ -85,7 +92,7 @@ Root: HKCU; Subkey: "Software\HeMi"; Flags: uninsdeletekeyifempty dontcreatekey
 [Code]
 // Since 2026-11 the HeMi apps go into one folder HeMi, as their settings do (%AppData%\HeMi\<app>): {autopf}\HeMi\HeMiPad.
 // An installation in the old folder {autopf}\HeMiPad moves: the app running from there ends, the new version goes into the
-// new folder ("--repair" points the File Explorer items and the start with Windows to it) and the old folder is deleted.
+// new folder ("--repair" points the File Explorer item to it) and the old folder is deleted.
 var
   OldFolder: String;
 
@@ -139,7 +146,7 @@ begin
   Dir := ExpandConstant('{userappdata}\HeMi\HeMiPad');
   if not DirExists(Dir) then Exit;
   if UninstallSilent then Exit;
-  if MsgBox('Delete the settings of HeMiPad too?' + #13#10#13#10 + 'Keep them to use them again when you install HeMiPad later.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+  if MsgBox(CustomMessage('DeleteSettings'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
   begin
     DelTree(Dir, True, True, True);
     RemoveDir(ExpandConstant('{userappdata}\HeMi'));

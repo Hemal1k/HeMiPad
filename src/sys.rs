@@ -23,7 +23,6 @@ pub fn new_window(file: Option<&std::path::Path>) {
     }
 }
 
-/// The time and the date as Notepad inserts them with F5 ("14:05 12.11.2026" on a Czech Windows).
 /// Opens a web page in the default browser (HeMiPad itself never goes online: only the browser does, when the user asks).
 pub fn open_url(url: &str) {
     use windows_sys::Win32::UI::Shell::ShellExecuteW;
@@ -32,6 +31,7 @@ pub fn open_url(url: &str) {
     unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), null(), null(), SW_SHOWNORMAL) };
 }
 
+/// The time and the date as Notepad inserts them with F5 ("14:05 12.11.2026" on a Czech Windows).
 pub fn time_date() -> String {
     let mut t = [0u16; 64];
     let mut d = [0u16; 64];

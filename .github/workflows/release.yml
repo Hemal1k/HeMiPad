@@ -7,15 +7,18 @@ on:
     types: [published]
   workflow_dispatch:
 
-permissions:
-  contents: write
+# nothing by default; the job that attaches the downloads gets write access to the releases only
+permissions: {}
 
 jobs:
   build:
+    permissions:
+      contents: write
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          persist-credentials: false
           ref: ${{ github.event.release.tag_name || github.ref }}
 
       - name: Rust
@@ -24,7 +27,7 @@ jobs:
       - name: Inno Setup
         run: choco install innosetup --no-progress -y
 
-      - name: Build the installer and the portable zip
+      - name: Build the installer and the portable exe files
         shell: pwsh
         run: ./release.ps1
 
@@ -33,7 +36,7 @@ jobs:
         shell: pwsh
         run: Get-ChildItem build/dist -File | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Set-Content build/dist/SHA256SUMS.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: HeMiPad
           path: build/dist/*
@@ -43,4 +46,5 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" build/dist/HeMiPad-Setup.exe build/dist/HeMiPad-Portable.exe build/dist/HeMiPad-Portable-arm64.exe build/dist/SHA256SUMS.txt --clobber --repo "${{ github.repository }}"
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$env:TAG" build/dist/HeMiPad-Setup.exe build/dist/HeMiPad-Portable.exe build/dist/HeMiPad-Portable-arm64.exe build/dist/SHA256SUMS.txt --clobber --repo "${{ github.repository }}"

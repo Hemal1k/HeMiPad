@@ -25,7 +25,7 @@ foreach ($arch in $targets.Keys) {
     $triple = $targets[$arch]
     $ErrorActionPreference = 'Continue'
     rustup target add $triple *> $null
-    cargo build --release --target $triple
+    cargo build --release --locked --target $triple
     $ok = $LASTEXITCODE -eq 0
     $ErrorActionPreference = 'Stop'
     if (-not $ok) {

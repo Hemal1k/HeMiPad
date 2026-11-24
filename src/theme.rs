@@ -1,5 +1,5 @@
-//! The look of HeMiDock (WinUI 3 / Fluent) in egui: the colours of the Windows 11 theme, the accent colour,
-//! Segoe UI Variable and Segoe Fluent Icons, the title bar in the colour of the window.
+//! The look of HeMiDock (WinUI 3 / Fluent) in egui: the colors of the Windows 11 theme, the accent color,
+//! Segoe UI Variable and Segoe Fluent Icons, the title bar in the color of the window.
 //!
 //! Light / dark and the accent: the own setting of the app, else Windows (no longer the settings of HeMiDock – they
 //! changed every HeMi app at once).
@@ -54,7 +54,7 @@ pub fn editor(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name(EDITOR.into()))
 }
 
-/// Everything the colours depend on; read again every few seconds and compared.
+/// Everything the colors depend on; read again every few seconds and compared.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Source {
     pub light: bool,
@@ -180,7 +180,7 @@ pub fn palette(s: &Source) -> Palette {
     }
 }
 
-// ---------------------------------------------------------------- where the colours come from
+// ---------------------------------------------------------------- where the colors come from
 
 fn reg_dword(key: &str, value: &str) -> Option<u32> {
     let (k, v) = (crate::sys::wide(key), crate::sys::wide(value));
@@ -219,10 +219,10 @@ fn shades(base: Color32) -> [Color32; 7] {
     [mix(base, w, 0.72), mix(base, w, 0.5), mix(base, w, 0.25), base, mix(base, b, 0.2), mix(base, b, 0.4), mix(base, b, 0.6)]
 }
 
-/// `mode`: the choice in HeMiPad's settings – 0 = automatic (HeMiDock's setting, else Windows), 1 = light, 2 = dark.
+/// `mode`: the choice in HeMiPad's settings – 0 = automatic (as Windows), 1 = light, 2 = dark.
 pub fn read_source(mode: u8) -> Source {
     // each app has its own look (the user, 2026-11-19: the theme of HeMiDock changed HeMi Launcher too): the settings of
-    // HeMiDock are not read any more – "as Windows" is the light / dark mode and the accent colour of Windows
+    // HeMiDock are not read any more – "as Windows" is the light / dark mode and the accent color of Windows
     let hemidock = String::new();
     let theme_mode = match mode {
         1 | 2 => mode as i32,
@@ -404,10 +404,10 @@ fn colorref(c: Color32) -> u32 {
     c.r() as u32 | (c.g() as u32) << 8 | (c.b() as u32) << 16
 }
 
-/// The title bar of Windows in the colours of the window (as WinUI with its own title bar).
+/// The title bar of Windows in the colors of the window (as WinUI with its own title bar).
 /// With `mica`, the window gets the Mica material of Windows 11 behind everything that is not a card
 /// (the title bar, the menu bar, the margins, the status bar). Returns true when Mica is on
-/// (false on Windows 10 and older Windows 11, which then get the plain background colour).
+/// (false on Windows 10 and older Windows 11, which then get the plain background color).
 pub fn style_window(hwnd: isize, p: &Palette, mica: bool) -> bool {
     if hwnd == 0 {
         return false;
@@ -418,7 +418,7 @@ pub fn style_window(hwnd: isize, p: &Palette, mica: bool) -> bool {
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE as _, &dark as *const i32 as _, 4);
         let backdrop: i32 = if mica { DWMSBT_MAINWINDOW } else { DWMSBT_AUTO };
         let mica_on = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE as _, &backdrop as *const i32 as _, 4) == 0 && mica;
-        // the title bar: the default colours let Mica through; without Mica the colour of the window
+        // the title bar: the default colors let Mica through; without Mica the color of the window
         let (caption, text) = if mica_on { (DWMWA_COLOR_DEFAULT, DWMWA_COLOR_DEFAULT) } else { (colorref(p.bg), colorref(p.text)) };
         DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR as _, &caption as *const u32 as _, 4);
         DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR as _, &text as *const u32 as _, 4);

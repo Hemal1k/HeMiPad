@@ -18,7 +18,7 @@ pub fn section(ui: &mut egui::Ui, p: &Palette, text: &str) {
     ui.add_space(4.0);
 }
 
-/// A card of the settings of HeMiDock: the card colour, a thin frame, rounded corners.
+/// A card of the settings of HeMiDock: the card color, a thin frame, rounded corners.
 pub fn card<R>(ui: &mut egui::Ui, p: &Palette, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     egui::Frame::new()
         .fill(p.card)
@@ -32,7 +32,7 @@ pub fn card<R>(ui: &mut egui::Ui, p: &Palette, add: impl FnOnce(&mut egui::Ui) -
         .inner
 }
 
-/// A row of fixed height with the items centred vertically.
+/// A row of fixed height with the items centered vertically.
 pub fn row_layout(ui: &mut egui::Ui, height: f32, add: impl FnOnce(&mut egui::Ui)) {
     let w = ui.available_width();
     ui.allocate_ui_with_layout(vec2(w, height), Layout::left_to_right(Align::Center), |ui| {
@@ -41,7 +41,7 @@ pub fn row_layout(ui: &mut egui::Ui, height: f32, add: impl FnOnce(&mut egui::Ui
     });
 }
 
-/// An InfoBar of WinUI: a coloured strip with an icon. Returns true when its × was clicked.
+/// An InfoBar of WinUI: a colored strip with an icon. Returns true when its × was clicked.
 pub fn info_bar(ui: &mut egui::Ui, p: &Palette, tone: Tone, text: &str, closable: Option<()>) -> bool {
     let (bg, fg, g) = match tone {
         Tone::Success => (p.success_bg, p.success, glyph::COMPLETED),
@@ -72,7 +72,7 @@ pub fn info_bar(ui: &mut egui::Ui, p: &Palette, tone: Tone, text: &str, closable
     closed
 }
 
-/// A ToggleSwitch of WinUI: a pill 40 × 20 with a knob, the accent colour when on.
+/// A ToggleSwitch of WinUI: a pill 40 × 20 with a knob, the accent color when on.
 pub fn toggle(ui: &mut egui::Ui, p: &Palette, on: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(40.0, 20.0), Sense::click());
     let t = ui.ctx().animate_bool_with_time(resp.id, on, 0.12);
