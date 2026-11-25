@@ -186,6 +186,7 @@ fn reg_dword(key: &str, value: &str) -> Option<u32> {
     let (k, v) = (crate::sys::wide(key), crate::sys::wide(value));
     let mut data = 0u32;
     let mut size = 4u32;
+    // SAFETY: the key and value names are NUL-terminated and live for the call; `data` is a u32 and `size` says 4 bytes.
     let r = unsafe {
         RegGetValueW(HKEY_CURRENT_USER, k.as_ptr(), v.as_ptr(), RRF_RT_REG_DWORD, null_mut(), &mut data as *mut u32 as _, &mut size)
     };
@@ -196,6 +197,7 @@ fn reg_binary(key: &str, value: &str) -> Option<Vec<u8>> {
     let (k, v) = (crate::sys::wide(key), crate::sys::wide(value));
     let mut data = vec![0u8; 64];
     let mut size = data.len() as u32;
+    // SAFETY: NUL-terminated names that live for the call; `size` is the length of `data`, so the API never writes past it.
     let r = unsafe {
         RegGetValueW(HKEY_CURRENT_USER, k.as_ptr(), v.as_ptr(), RRF_RT_REG_BINARY, null_mut(), data.as_mut_ptr() as _, &mut size)
     };
@@ -203,15 +205,6 @@ fn reg_binary(key: &str, value: &str) -> Option<Vec<u8>> {
         data.truncate(size as usize);
         data
     })
-}
-
-/// A value from HeMiDock's settings.json (a flat object; no JSON library needed).
-fn setting<'a>(json: &'a str, key: &str) -> Option<&'a str> {
-    let k = format!("\"{key}\"");
-    let rest = &json[json.find(&k)? + k.len()..];
-    let rest = rest.trim_start().strip_prefix(':')?.trim_start();
-    let end = rest.find([',', '\n', '}'])?;
-    Some(rest[..end].trim().trim_matches('"'))
 }
 
 fn shades(base: Color32) -> [Color32; 7] {
@@ -223,10 +216,9 @@ fn shades(base: Color32) -> [Color32; 7] {
 pub fn read_source(mode: u8) -> Source {
     // each app has its own look (the user, 2026-11-19: the theme of HeMiDock changed HeMi Launcher too): the settings of
     // HeMiDock are not read any more – "as Windows" is the light / dark mode and the accent color of Windows
-    let hemidock = String::new();
     let theme_mode = match mode {
-        1 | 2 => mode as i32,
-        _ => setting(&hemidock, "ThemeMode").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0),
+        1 | 2 => i32::from(mode),
+        _ => 0,
     };
     // Debug builds only: HEMI_THEME=light / dark for screenshots, without changing Windows
     let theme_mode = match std::env::var("HEMI_THEME").ok().filter(|_| cfg!(debug_assertions)).as_deref() {
@@ -240,18 +232,9 @@ pub fn read_source(mode: u8) -> Source {
         _ => reg_dword(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme").unwrap_or(1) != 0,
     };
 
-    let own = (setting(&hemidock, "AccentMode") == Some("1"))
-        .then(|| setting(&hemidock, "AccentColor"))
-        .flatten()
-        .and_then(|c| u32::from_str_radix(c.trim_start_matches('#'), 16).ok())
-        .map(|c| rgb((c >> 16) as u8, (c >> 8) as u8, c as u8));
-
-    let accent = match own {
-        Some(c) => shades(c),
-        None => match reg_binary(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent", "AccentPalette") {
-            Some(p) if p.len() >= 28 => std::array::from_fn(|i| rgb(p[i * 4], p[i * 4 + 1], p[i * 4 + 2])),
-            _ => shades(rgb(0x00, 0x78, 0xD4)),
-        },
+    let accent = match reg_binary(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent", "AccentPalette") {
+        Some(p) if p.len() >= 28 => std::array::from_fn(|i| rgb(p[i * 4], p[i * 4 + 1], p[i * 4 + 2])),
+        _ => shades(rgb(0x00, 0x78, 0xD4)),
     };
     Source { light, accent }
 }
@@ -259,8 +242,8 @@ pub fn read_source(mode: u8) -> Source {
 // ---------------------------------------------------------------- egui
 
 /// Segoe UI Variable (with its weight axis for the semibold texts) and Segoe Fluent Icons from Windows,
-/// and the font of the editor (`editor`: the bytes of a font file and the index of the face in it).
-pub fn install_fonts(ctx: &egui::Context, editor: Option<(Vec<u8>, u32)>) {
+/// and Consolas for the editor.
+pub fn install_fonts(ctx: &egui::Context) {
     let mut defs = FontDefinitions::default();
     let fonts = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into()) + r"\Fonts\";
     let read = |name: &str| std::fs::read(format!("{fonts}{name}")).ok();
@@ -297,12 +280,8 @@ pub fn install_fonts(ctx: &egui::Context, editor: Option<(Vec<u8>, u32)>) {
         icon_family.push("fluent-icons".to_string());
     }
 
-    // the editor: the chosen font, Consolas, then the fonts of the UI for characters the first ones lack
+    // the editor: Consolas, then the fonts of the UI for characters it lacks
     let mut edit_family = Vec::new();
-    if let Some((bytes, index)) = editor {
-        defs.font_data.insert("editor-chosen".into(), Arc::new(FontData { index, ..FontData::from_owned(bytes) }));
-        edit_family.push("editor-chosen".to_string());
-    }
     if let Some(c) = read("consola.ttf") {
         defs.font_data.insert("consolas".into(), Arc::new(FontData::from_owned(c)));
         edit_family.push("consolas".to_string());
@@ -414,6 +393,8 @@ pub fn style_window(hwnd: isize, p: &Palette, mica: bool) -> bool {
     }
     let hwnd = hwnd as HWND;
     let dark: i32 = (!p.light) as i32;
+    // SAFETY: `hwnd` is the window of this app (checked non-zero); every attribute points to a local 4-byte value
+    // that lives for the call and the size passed is 4; `m` is a local MARGINS.
     unsafe {
         DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE as _, &dark as *const i32 as _, 4);
         let backdrop: i32 = if mica { DWMSBT_MAINWINDOW } else { DWMSBT_AUTO };

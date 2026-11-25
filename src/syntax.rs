@@ -379,9 +379,7 @@ fn scalar(b: &[u8], off: usize, from: usize, to: usize, out: &mut Vec<(Range<usi
         } else {
             &[b"true", b"false", b"yes", b"no", b"on", b"off"]
         };
-        if words.contains(&lower.as_slice()) {
-            Kind::Keyword
-        } else if yaml && matches!(v[0], b'&' | b'*' | b'!') {
+        if words.contains(&lower.as_slice()) || (yaml && matches!(v[0], b'&' | b'*' | b'!')) {
             Kind::Keyword
         } else if yaml && matches!(v[0], b'|' | b'>') && v.len() <= 3 {
             Kind::Punct

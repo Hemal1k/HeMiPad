@@ -27,7 +27,7 @@ fn main() -> eframe::Result {
         shell_menu::repair();
         return Ok(());
     }
-    shell_menu::repair();
+    shell_menu::repair_if_broken();
 
     let icon = egui::IconData { rgba: include_bytes!("../assets/HeMiPad-64.rgba").to_vec(), width: 64, height: 64 };
     let mut viewport = egui::ViewportBuilder::default()
@@ -53,5 +53,6 @@ fn main() -> eframe::Result {
 fn on_screen(x: f32, y: f32) -> bool {
     use windows_sys::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONULL, MonitorFromPoint};
     let p = windows_sys::Win32::Foundation::POINT { x: x as i32 + 80, y: y as i32 + 16 };
+    // SAFETY: the point is passed by value; the returned handle is only compared with null.
     !unsafe { MonitorFromPoint(p, MONITOR_DEFAULTTONULL) }.is_null()
 }

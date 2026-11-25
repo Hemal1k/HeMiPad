@@ -23,6 +23,7 @@ use windows_sys::Win32::UI::Controls::Dialogs::{
 pub fn has_printer() -> bool {
     use windows_sys::Win32::Graphics::Printing::{EnumPrintersW, PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL};
     let (mut needed, mut count) = (0u32, 0u32);
+    // SAFETY: the first call only asks for the size (no buffer); the second gets a buffer of exactly that size.
     unsafe {
         EnumPrintersW(PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS, null(), 4, null_mut(), 0, &mut needed, &mut count);
         if needed == 0 {
@@ -39,6 +40,7 @@ static DEVICE: Mutex<(usize, usize)> = Mutex::new((0, 0));
 /// Page Setup. `margins` = left, top, right, bottom in hundredths of a millimetre; changed when OK.
 pub fn page_setup(owner: isize, margins: &mut [i32; 4]) -> bool {
     let mut dev = DEVICE.lock().unwrap();
+    // SAFETY: PAGESETUPDLGW is a plain C struct; all zeros is its documented empty state.
     let mut ps: PAGESETUPDLGW = unsafe { std::mem::zeroed() };
     ps.lStructSize = std::mem::size_of::<PAGESETUPDLGW>() as u32;
     ps.hwndOwner = owner as HWND;
@@ -46,6 +48,7 @@ pub fn page_setup(owner: isize, margins: &mut [i32; 4]) -> bool {
     ps.hDevNames = dev.1 as _;
     ps.Flags = PSD_INHUNDREDTHSOFMILLIMETERS | PSD_MARGINS;
     ps.rtMargin = RECT { left: margins[0], top: margins[1], right: margins[2], bottom: margins[3] };
+    // SAFETY: `ps` is filled in with its size set; the device HGLOBALs are null or the ones Windows gave last time.
     let ok = unsafe { PageSetupDlgW(&mut ps) } != 0;
     *dev = (ps.hDevMode as usize, ps.hDevNames as usize);
     if ok {
@@ -58,6 +61,7 @@ pub fn page_setup(owner: isize, margins: &mut [i32; 4]) -> bool {
 /// Ok(false) when cancelled.
 pub fn print(owner: isize, title: &str, text: &str, selection: Option<&str>, font: &FontChoice, margins: [i32; 4]) -> Result<bool, String> {
     let mut dev = DEVICE.lock().unwrap();
+    // SAFETY: PRINTDLGW is a plain C struct; all zeros is its documented empty state.
     let mut pd: PRINTDLGW = unsafe { std::mem::zeroed() };
     pd.lStructSize = std::mem::size_of::<PRINTDLGW>() as u32;
     pd.hwndOwner = owner as HWND;
@@ -65,6 +69,7 @@ pub fn print(owner: isize, title: &str, text: &str, selection: Option<&str>, fon
     pd.hDevNames = dev.1 as _;
     pd.Flags = PD_RETURNDC | PD_USEDEVMODECOPIESANDCOLLATE | PD_NOPAGENUMS | if selection.is_none() { PD_NOSELECTION } else { 0 };
     pd.nCopies = 1;
+    // SAFETY: as PageSetupDlgW above.
     let ok = unsafe { PrintDlgW(&mut pd) } != 0;
     *dev = (pd.hDevMode as usize, pd.hDevNames as usize);
     drop(dev);
@@ -75,7 +80,9 @@ pub fn print(owner: isize, title: &str, text: &str, selection: Option<&str>, fon
         Some(s) if pd.Flags & PD_SELECTION != 0 => s,
         _ => text,
     };
+    // SAFETY: `pd.hDC` is the printer DC the dialog returned (checked non-null); it is deleted once, after printing.
     let r = unsafe { print_to(pd.hDC, title, body, font, margins) };
+    // SAFETY: see above.
     unsafe { DeleteDC(pd.hDC) };
     r.map(|_| true)
 }
@@ -98,7 +105,16 @@ fn expand_tabs(line: &str) -> Vec<u16> {
     out
 }
 
+/// The length of a UTF-16 text for GDI (a longer one is cut: GDI then reads less, never past the end).
+fn gdi_len(s: &[u16]) -> i32 {
+    i32::try_from(s.len()).unwrap_or(i32::MAX)
+}
+
+/// # Safety
+/// `hdc` must be a valid printer DC that stays alive for the call.
 unsafe fn print_to(hdc: HDC, title: &str, text: &str, font: &FontChoice, m: [i32; 4]) -> Result<(), String> {
+    // SAFETY: `hdc` is valid (the caller's promise); every buffer passed to GDI is local and lives for the call,
+    // with its length passed through gdi_len; the font and the selected object are put back and deleted at the end.
     unsafe {
         let (dpi_x, dpi_y) = (GetDeviceCaps(hdc, LOGPIXELSX as _), GetDeviceCaps(hdc, LOGPIXELSY as _));
         let (phys_w, phys_h) = (GetDeviceCaps(hdc, PHYSICALWIDTH as _), GetDeviceCaps(hdc, PHYSICALHEIGHT as _));
@@ -152,8 +168,8 @@ unsafe fn print_to(hdc: HDC, title: &str, text: &str, font: &FontChoice, m: [i32
         let mut y = body_bottom;
         let centered = |s: &[u16], y: i32| {
             let mut sz = std::mem::zeroed();
-            GetTextExtentPoint32W(hdc, s.as_ptr(), s.len() as i32, &mut sz);
-            TextOutW(hdc, left + ((width - sz.cx) / 2).max(0), y, s.as_ptr(), s.len() as i32);
+            GetTextExtentPoint32W(hdc, s.as_ptr(), gdi_len(s), &mut sz);
+            TextOutW(hdc, left + ((width - sz.cx) / 2).max(0), y, s.as_ptr(), gdi_len(s));
         };
         let title_w: Vec<u16> = title.encode_utf16().collect();
         let new_page = |page: &mut i32, y: &mut i32| {
@@ -180,7 +196,7 @@ unsafe fn print_to(hdc: HDC, title: &str, text: &str, font: &FontChoice, m: [i32
                 }
                 let mut fit = 0i32;
                 let mut sz = std::mem::zeroed();
-                GetTextExtentExPointW(hdc, w.as_ptr(), w.len() as i32, width, &mut fit, null_mut(), &mut sz);
+                GetTextExtentExPointW(hdc, w.as_ptr(), gdi_len(&w), width, &mut fit, null_mut(), &mut sz);
                 let mut n = (fit.max(1) as usize).min(w.len());
                 if n < w.len() {
                     // break after the last space that fits
@@ -190,7 +206,7 @@ unsafe fn print_to(hdc: HDC, title: &str, text: &str, font: &FontChoice, m: [i32
                         n = sp + 1;
                     }
                 }
-                TextOutW(hdc, left, y, w.as_ptr(), n as i32);
+                TextOutW(hdc, left, y, w.as_ptr(), gdi_len(&w[..n]));
                 y += lh;
                 w.drain(..n);
                 if w.is_empty() {

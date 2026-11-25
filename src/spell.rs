@@ -2,6 +2,7 @@
 //! Czech and English together – a word is wrong only when it is wrong in every language.
 //! The text is checked on a thread of its own, a while after the last change.
 
+use crate::sys::wide;
 use std::ops::Range;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use windows::Win32::Globalization::{ISpellChecker, ISpellCheckerFactory, SpellCheckerFactory};
@@ -24,6 +25,8 @@ pub enum Reply {
     /// The revision of the text and the wrong words as character ranges.
     Checked(u64, Vec<Range<usize>>),
     Suggestions(String, Vec<String>),
+    /// Windows did not take the word into its user dictionary.
+    NotAdded(String),
 }
 
 pub struct Spell {
@@ -61,6 +64,7 @@ impl Spell {
             }
             // HeMiPad let the checker go (Spell dropped): release the dictionaries and COM
             drop(checkers);
+            // SAFETY: pairs with CoInitializeEx in Checkers::new on this thread; no COM object of it is left.
             unsafe { windows::Win32::System::Com::CoUninitialize() };
         });
         ok_rx.recv().ok().flatten().map(|langs| Spell { tx, rx, langs })
@@ -82,36 +86,12 @@ impl Spell {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn languages() {
-        use windows::Win32::System::Com::IEnumString;
-        unsafe {
-            let _ = super::CoInitializeEx(None, super::COINIT_MULTITHREADED);
-            let f: super::ISpellCheckerFactory = super::CoCreateInstance(&super::SpellCheckerFactory, None, super::CLSCTX_INPROC_SERVER).unwrap();
-            let list: IEnumString = f.SupportedLanguages().unwrap();
-            loop {
-                let mut item = [super::PWSTR::null()];
-                let mut got = 0u32;
-                let _ = list.Next(&mut item, Some(&mut got));
-                if got == 0 {
-                    break;
-                }
-                println!("LANG {}", item[0].to_string().unwrap());
-            }
-        }
-    }
-}
-
-fn wide(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
 struct Checkers(Vec<ISpellChecker>, Vec<String>);
 
 impl Checkers {
     fn new() -> Option<Checkers> {
+        // SAFETY: COM is initialized on this (the checker's own) thread first; the language names are
+        // NUL-terminated and live for each call.
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let factory: ISpellCheckerFactory = CoCreateInstance(&SpellCheckerFactory, None, CLSCTX_INPROC_SERVER).ok()?;
@@ -142,24 +122,28 @@ impl Checkers {
                 let s = self.suggest(&word);
                 let _ = tx.send(Reply::Suggestions(word, s));
             }
-            Job::Add(word) => unsafe {
+            Job::Add(word) => {
+                let w = wide(&word);
+                // SAFETY: `w` is NUL-terminated and lives for the calls; the checkers are COM objects of this thread.
+                let added = self.0.iter().filter(|c| unsafe { c.Add(PCWSTR(w.as_ptr())) }.is_ok()).count();
+                if added == 0 {
+                    let _ = tx.send(Reply::NotAdded(word));
+                }
+            }
+            Job::Ignore(word) => {
                 let w = wide(&word);
                 for c in &self.0 {
-                    let _ = c.Add(PCWSTR(w.as_ptr()));
+                    // SAFETY: as above. Ignoring is only for this run, so a failure needs no message.
+                    let _ = unsafe { c.Ignore(PCWSTR(w.as_ptr())) };
                 }
-            },
-            Job::Ignore(word) => unsafe {
-                let w = wide(&word);
-                for c in &self.0 {
-                    let _ = c.Ignore(PCWSTR(w.as_ptr()));
-                }
-            },
+            }
         }
     }
 
     /// Wrong in this checker: UTF-16 ranges of the text.
     fn errors(c: &ISpellChecker, text: &[u16]) -> Vec<Range<usize>> {
         let mut out = Vec::new();
+        // SAFETY: `text` ends with a NUL (callers add it) and lives for the call; `e` is a local out value.
         unsafe {
             let Ok(list) = c.Check(PCWSTR(text.as_ptr())) else { return out };
             loop {
@@ -190,7 +174,7 @@ impl Checkers {
         let first = &self.0[0];
         let mut wrong: Vec<Range<usize>> = Self::errors(first, &w)
             .into_iter()
-            .filter(|r| r.end <= w.len() - 1 && self.0[1..].iter().all(|c| !Self::word_ok(c, &w[r.clone()])))
+            .filter(|r| r.end < w.len() && self.0[1..].iter().all(|c| !Self::word_ok(c, &w[r.clone()])))
             .collect();
         wrong.sort_by_key(|r| r.start);
         // UTF-16 positions → character positions (one pass, the ranges are sorted)
@@ -223,6 +207,8 @@ impl Checkers {
         let w = wide(word);
         let mut out = Vec::new();
         for c in &self.0 {
+            // SAFETY: `w` is NUL-terminated and lives for the call; each string Next hands out is ours and is
+            // freed with CoTaskMemFree after it was copied.
             unsafe {
                 let Ok(list) = c.Suggest(PCWSTR(w.as_ptr())) else { continue };
                 loop {
@@ -242,5 +228,28 @@ impl Checkers {
         }
         out.truncate(8);
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn languages() {
+        use windows::Win32::System::Com::IEnumString;
+        // SAFETY: COM is initialized on this thread before use; `item` and `got` live for each call.
+        unsafe {
+            let _ = super::CoInitializeEx(None, super::COINIT_MULTITHREADED);
+            let f: super::ISpellCheckerFactory = super::CoCreateInstance(&super::SpellCheckerFactory, None, super::CLSCTX_INPROC_SERVER).unwrap();
+            let list: IEnumString = f.SupportedLanguages().unwrap();
+            loop {
+                let mut item = [super::PWSTR::null()];
+                let mut got = 0u32;
+                let _ = list.Next(&mut item, Some(&mut got));
+                if got == 0 {
+                    break;
+                }
+                println!("LANG {}", item[0].to_string().unwrap());
+            }
+        }
     }
 }

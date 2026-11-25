@@ -112,11 +112,16 @@ end;
 procedure StopOld;
 var
   Code: Integer;
+  Quoted: String;
 begin
   OldFolder := FindOldFolder;
   if OldFolder = '' then Exit;
+  // the folder as a PowerShell string in single quotes: an apostrophe in it (O'Neil) doubled; compared as text by
+  // StartsWith, not by -like, where [ ] and * in a folder name would be wildcards
+  Quoted := OldFolder;
+  StringChangeEx(Quoted, '''', '''''', True);
   Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-    '-NoProfile -NonInteractive -Command "Get-Process | Where-Object { $_.Path -like ''' + OldFolder + '\*'' } | Stop-Process -Force"',
+    '-NoProfile -NonInteractive -Command "$d = ''' + Quoted + '\''; Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($d, [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force"',
     '', SW_HIDE, ewWaitUntilTerminated, Code);
 end;
 

@@ -13,14 +13,12 @@ fn from_wide(buf: &[u16]) -> String {
 }
 
 /// Starts another HeMiPad (File → New window), with a file or empty.
-pub fn new_window(file: Option<&std::path::Path>) {
-    if let Ok(exe) = std::env::current_exe() {
-        let mut cmd = std::process::Command::new(exe);
-        if let Some(f) = file {
-            cmd.arg(f);
-        }
-        let _ = cmd.spawn();
+pub fn new_window(file: Option<&std::path::Path>) -> std::io::Result<()> {
+    let mut cmd = std::process::Command::new(std::env::current_exe()?);
+    if let Some(f) = file {
+        cmd.arg(f);
     }
+    cmd.spawn().map(drop)
 }
 
 /// Opens a web page in the default browser (HeMiPad itself never goes online: only the browser does, when the user asks).
@@ -28,6 +26,7 @@ pub fn open_url(url: &str) {
     use windows_sys::Win32::UI::Shell::ShellExecuteW;
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
     let (verb, target) = (wide("open"), wide(url));
+    // SAFETY: the strings are NUL-terminated and live for the call; the other pointers may be null.
     unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), null(), null(), SW_SHOWNORMAL) };
 }
 
@@ -35,6 +34,7 @@ pub fn open_url(url: &str) {
 pub fn time_date() -> String {
     let mut t = [0u16; 64];
     let mut d = [0u16; 64];
+    // SAFETY: the buffers are local and their length is passed, so the API writes inside them.
     unsafe {
         GetTimeFormatEx(null(), TIME_NOSECONDS, null(), null(), t.as_mut_ptr(), t.len() as i32);
         GetDateFormatEx(null(), DATE_SHORTDATE, null(), null(), d.as_mut_ptr(), d.len() as i32, null());

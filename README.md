@@ -28,10 +28,17 @@ Windows 10 / 11, x64 and ARM64. Nothing else needs to be installed.
 - **Edit**: undo / redo, find (F3 / Shift+F3), replace, go to line, select all, time and date (F5).
 - **View**: zoom (Ctrl+wheel), word wrap, status bar, line numbers, colors, spell check.
 - **Colors** for JSON, YAML, XML, INI / TOML and Markdown; Enter keeps the indentation, Tab / Shift+Tab on several lines.
-- **Spell check** in Czech and English with the dictionaries of Windows (suggestions on right click).
+- **Spell check** in Czech and English with the dictionaries of Windows (suggestions on right click). “Add to
+  dictionary” puts the word into the user dictionary of Windows, which other apps (Edge, Office) share; it stays there
+  after HeMiPad is uninstalled. “Ignore” lasts until HeMiPad is closed.
 - **Encodings**: UTF-8 with or without BOM, UTF-16 LE / BE, ANSI, OEM; line endings CRLF / LF / CR – in the status bar.
-- **.LOG** files get the time and date at their end, a file changed by another program is offered to reload.
+- **.LOG** files get the time and date at their end, a file changed by another program is offered to reload (and
+  saving over such a change asks first). Characters that ANSI / OEM cannot hold are asked about before saving.
+- **Big files**: over 64 MB HeMiPad asks before opening, over 1 GB it does not open them.
 - **Settings** in the whole window (the gear): theme (automatic / light / dark), language, the optional File Explorer item “Open in HeMiPad”, and About with the links.
+  The File Explorer item belongs to each Windows user (it is in their own registry): it points to the HeMiPad it was
+  switched on in, until that exe is gone. Uninstalling removes it for the user who uninstalls; after an installation
+  for all users, every other user who switched it on turns it off in Settings before the uninstall.
 
 HeMiPad never connects to the internet. Its settings are in `%AppData%\HeMi\HeMiPad\settings.ini`.
 

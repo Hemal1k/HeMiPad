@@ -46,6 +46,7 @@ pub fn windows_cz() -> bool {
             _ => {}
         }
     }
+    // SAFETY: no arguments, it only returns the language id.
     (unsafe { GetUserDefaultUILanguage() } & 0x3FF) == 0x05
 }
 

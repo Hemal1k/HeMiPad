@@ -1,6 +1,6 @@
 //! The window of HeMiPad: the menu bar, the find bar, the editor, the status bar and the dialogs.
-//! It does everything the classic Notepad does, plus colors for JSON / YAML / XML / INI / Markdown,
-//! line numbers and the spell checker of Windows.
+//! It does everything the classic Notepad does, plus colors for JSON / YAML / XML / INI / Markdown
+//! (coloring only), line numbers and the spell checker of Windows.
 //!
 //! Light on the system: nothing is drawn while nobody does anything (the cursor does not blink,
 //! the theme is checked only when something happens), the coloring of the text is cached,
@@ -15,8 +15,7 @@ use crate::sys;
 use crate::theme::{self, Palette, glyph};
 use crate::widgets::{Btn, CARD_RADIUS, Tone, card, dropdown, info_bar, row_layout, section, toggle};
 use eframe::egui::{
-    self, Align, Align2, Color32, CornerRadius, Event, Galley, Id, Key, KeyboardShortcut, Layout, Margin, Modifiers, Pos2,
-    Rect, RichText, Shape, Stroke, TextBuffer, UiBuilder, pos2, vec2,
+    self, Align, Align2, Color32, CornerRadius, Event, Galley, Id, Key, KeyboardShortcut, Layout, Margin, Modifiers, Rect, RichText, Shape, Stroke, TextBuffer, UiBuilder, pos2, vec2,
 };
 use eframe::egui::text::{CCursor, CCursorRange};
 use eframe::egui::text_edit::TextEditState;
@@ -87,6 +86,12 @@ enum Dialog {
     Reload,
     GoTo(String),
     NoPrinter,
+    /// A big file (path, size in bytes): open it anyway?
+    BigFile(PathBuf, u64),
+    /// Another program changed the file since it was opened or saved: overwrite it? (path, what to do after)
+    Overwrite(PathBuf, Option<Pending>),
+    /// Some characters cannot be written in the encoding: save as UTF-8, anyway, or not? (path, what to do after)
+    Lossy(PathBuf, Option<Pending>),
 }
 
 struct Toast {
@@ -168,6 +173,8 @@ pub struct HeMiPadApp {
     hwnd: isize,
     s: Settings,
     saved_settings: Settings,
+    /// Saving the settings failed (told once, until it works again).
+    settings_failed: bool,
 
     path: Option<PathBuf>,
     text: String,
@@ -215,7 +222,7 @@ impl HeMiPadApp {
     pub fn new(cc: &eframe::CreationContext<'_>, file: Option<PathBuf>, s: Settings) -> Self {
         let source = theme::read_source(s.theme);
         let p = theme::palette(&source);
-        theme::install_fonts(&cc.egui_ctx, None);
+        theme::install_fonts(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx, &p);
         cc.egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
         let hwnd = match cc.window_handle().map(|h| h.as_raw()) {
@@ -231,6 +238,7 @@ impl HeMiPadApp {
             theme_checked: Instant::now(),
             hwnd,
             saved_settings: s.clone(),
+            settings_failed: false,
             s,
             path: None,
             text: String::new(),
@@ -272,7 +280,7 @@ impl HeMiPadApp {
         app.reset_editor(&cc.egui_ctx, 0);
         if let Some(f) = file {
             if f.exists() {
-                app.load(&cc.egui_ctx, &f, None);
+                app.open(&cc.egui_ctx, &f);
             } else {
                 app.lang = Lang::from_path(&f);
                 app.path = Some(f);
@@ -347,8 +355,26 @@ impl HeMiPadApp {
                     self.scroll_to_cursor = true;
                 }
                 self.reset_editor(ctx, cursor);
+                if l.lossy {
+                    let t = tr(
+                        "Some bytes of the file cannot be read as {enc} (they show as “�”) – saving the file will change them.",
+                        "Některé bajty souboru nejde přečíst jako {enc} (vidíš je jako „�“) – uložením souboru se změní.",
+                    )
+                    .replace("{enc}", self.enc.label());
+                    self.toast(t, Tone::Caution);
+                }
             }
             Err(e) => self.toast(format!("{}: {e}", tr("The file cannot be opened", "Soubor nejde otevřít")), Tone::Critical),
+        }
+    }
+
+    /// Opens a file the user picked: a big one only after a question (a huge one is refused by doc::load).
+    fn open(&mut self, ctx: &egui::Context, path: &Path) {
+        let size = doc::size(path);
+        if size > doc::ASK_OPEN && size <= doc::MAX_OPEN {
+            self.dialog = Some(Dialog::BigFile(path.to_path_buf(), size));
+        } else {
+            self.load(ctx, path, None);
         }
     }
 
@@ -363,8 +389,9 @@ impl HeMiPadApp {
         self.reset_editor(ctx, 0);
     }
 
-    /// Saves; asks for a name when there is none or `as_new`. False when not saved.
-    fn save(&mut self, as_new: bool) -> bool {
+    /// Saves; asks for a name when there is none or `as_new`. `then` runs after a successful save
+    /// (it may come later, after a question about the file).
+    fn save(&mut self, ctx: &egui::Context, as_new: bool, then: Option<Pending>) {
         let path = match (&self.path, as_new) {
             (Some(p), false) => p.clone(),
             _ => {
@@ -385,10 +412,37 @@ impl HeMiPadApp {
                 };
                 match d.save_file() {
                     Some(p) => p,
-                    None => return false,
+                    None => return,
                 }
             }
         };
+        self.save_checked(ctx, path, then, false, false);
+    }
+
+    /// Before writing: another program changed the file (`changed_ok` = the user said overwrite), or characters
+    /// would be lost in ANSI / OEM (`lossy_ok` = the user said save anyway). Each asks first, as Notepad does.
+    fn save_checked(&mut self, ctx: &egui::Context, path: PathBuf, then: Option<Pending>, changed_ok: bool, lossy_ok: bool) {
+        if !changed_ok && self.path.as_ref() == Some(&path) {
+            let now = doc::modified_time(&path);
+            if now.is_some() && now != self.mtime {
+                self.dialog = Some(Dialog::Overwrite(path, then));
+                return;
+            }
+        }
+        if !lossy_ok && doc::loses_characters(&self.text, self.enc) {
+            self.dialog = Some(Dialog::Lossy(path, then));
+            return;
+        }
+        if self.write(&path)
+            && let Some(p) = then
+        {
+            self.run_pending(ctx, p);
+        }
+    }
+
+    /// Writes the file. False when it failed (told in a message).
+    fn write(&mut self, path: &Path) -> bool {
+        let path = path.to_path_buf();
         match doc::save(&path, &self.text, self.enc, self.eol) {
             Ok(lossy) => {
                 if self.path.as_ref() != Some(&path) {
@@ -437,10 +491,10 @@ impl HeMiPadApp {
                     d = d.set_directory(dir);
                 }
                 if let Some(f) = d.pick_file() {
-                    self.load(ctx, &f, None);
+                    self.open(ctx, &f);
                 }
             }
-            Pending::OpenPath(f) => self.load(ctx, &f, None),
+            Pending::OpenPath(f) => self.open(ctx, &f),
             Pending::Close => {
                 self.allow_close = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -451,6 +505,25 @@ impl HeMiPadApp {
 
     fn toast(&mut self, text: impl Into<String>, tone: Tone) {
         self.toast = Some(Toast { text: text.into(), tone, until: Instant::now() + Duration::from_secs(6) });
+    }
+
+    /// Another HeMiPad window (empty or with a file); a message when it does not start.
+    fn new_window(&mut self, file: Option<&Path>) {
+        if let Err(e) = sys::new_window(file) {
+            self.toast(format!("{}: {e}", tr("A new window cannot be opened", "Nové okno nejde otevřít")), Tone::Critical);
+        }
+    }
+
+    /// Writes the settings; tells about a failure once a run (they are saved after every change).
+    fn save_settings(&mut self) {
+        match self.s.save() {
+            Ok(()) => self.settings_failed = false,
+            Err(e) if !self.settings_failed => {
+                self.settings_failed = true;
+                self.toast(format!("{}: {e}", tr("The settings cannot be saved", "Nastavení nejde uložit")), Tone::Critical);
+            }
+            Err(_) => {}
+        }
     }
 
     // ------------------------------------------------------------------ editing
@@ -665,6 +738,7 @@ impl HeMiPadApp {
     }
 
     fn spell_tick(&mut self, ctx: &egui::Context) {
+        let mut not_added = None;
         if let Some(sp) = &self.spell {
             while let Ok(r) = sp.rx.try_recv() {
                 match r {
@@ -675,8 +749,15 @@ impl HeMiPadApp {
                         }
                     }
                     Reply::Suggestions(w, s) => self.suggestions = Some((w, s)),
+                    Reply::NotAdded(w) => not_added = Some(w),
                 }
             }
+        }
+        if let Some(w) = not_added {
+            self.toast(
+                tr("“{w}” could not be added to the dictionary of Windows.", "„{w}“ se nepodařilo přidat do slovníku Windows.").replace("{w}", &w),
+                Tone::Critical,
+            );
         }
         if !self.spell_on() {
             // not needed (off, or JSON / YAML…): the dictionaries of Windows leave the memory
@@ -1230,7 +1311,16 @@ impl HeMiPadApp {
                         ui.label(RichText::new("…").color(p.text2));
                     }
                 }
-                item(ui, tr("Add to dictionary", "Přidat do slovníku"), "", Act::SpellAdd(word.clone()), acts);
+                if ui
+                    .button((blank(), tr("Add to dictionary", "Přidat do slovníku")))
+                    .on_hover_text(tr(
+                        "Into the user dictionary of Windows, shared with other apps.",
+                        "Do uživatelského slovníku Windows, který sdílí i jiné aplikace.",
+                    ))
+                    .clicked()
+                {
+                    acts.push(Act::SpellAdd(word.clone()));
+                }
                 item(ui, tr("Ignore", "Ignorovat"), "", Act::SpellIgnore(word.clone()), acts);
                 ui.separator();
             }
@@ -1243,7 +1333,6 @@ impl HeMiPadApp {
             ui.separator();
             item(ui, tr("Select all", "Vybrat vše"), "Ctrl+A", Act::SelectAll, acts);
         });
-        let _ = Pos2::ZERO;
     }
 
     /// The title of the settings page with the way back to the text (as in HeMi Launcher).
@@ -1354,6 +1443,30 @@ impl HeMiPadApp {
                 .replace("{name}", &name),
             ),
             Dialog::GoTo(_) => (tr("Go to line", "Přejít na řádek").into(), String::new()),
+            Dialog::BigFile(_, size) => (
+                tr("A big file", "Velký soubor").into(),
+                tr(
+                    "The file has {n} MB. Opening it can take a while and use a lot of memory. Open it?",
+                    "Soubor má {n} MB. Otevírání může chvíli trvat a zabere hodně paměti. Otevřít ho?",
+                )
+                .replace("{n}", &group_digits((*size >> 20) as usize)),
+            ),
+            Dialog::Overwrite(..) => (
+                tr("The file was changed", "Soubor byl změněn").into(),
+                tr(
+                    "Another program changed {name} since you opened it. Overwrite it with your version?",
+                    "Jiný program od otevření změnil soubor {name}. Přepsat ho tvou verzí?",
+                )
+                .replace("{name}", &name),
+            ),
+            Dialog::Lossy(..) => (
+                tr("Characters would be lost", "Znaky by se ztratily").into(),
+                tr(
+                    "Some characters cannot be written in {enc} – they would be saved as “?”. Save as UTF-8 to keep them?",
+                    "Některé znaky nejde zapsat v {enc} – uložily by se jako „?“. Uložit v UTF-8, aby zůstaly?",
+                )
+                .replace("{enc}", self.enc.label()),
+            ),
             Dialog::NoPrinter => (
                 tr("No printer", "Žádná tiskárna").into(),
                 tr(
@@ -1368,6 +1481,9 @@ impl HeMiPadApp {
             Dialog::SaveChanges(_) => vec![tr("Save", "Uložit"), tr("Don’t save", "Neukládat"), tr("Cancel", "Zrušit")],
             Dialog::Reload => vec![tr("Reload", "Načíst znovu"), tr("Keep my version", "Ponechat moji verzi")],
             Dialog::GoTo(_) => vec![tr("Go to", "Přejít"), tr("Cancel", "Zrušit")],
+            Dialog::BigFile(..) => vec![tr("Open", "Otevřít"), tr("Cancel", "Zrušit")],
+            Dialog::Overwrite(..) => vec![tr("Overwrite", "Přepsat"), tr("Cancel", "Zrušit")],
+            Dialog::Lossy(..) => vec![tr("Save as UTF-8", "Uložit v UTF-8"), tr("Save anyway", "Přesto uložit"), tr("Cancel", "Zrušit")],
         };
         let mut choice: Option<usize> = None;
         let frame = egui::Frame::new()
@@ -1423,14 +1539,33 @@ impl HeMiPadApp {
         match d {
             Dialog::NoPrinter => self.request_focus(ctx),
             Dialog::SaveChanges(pending) => match c {
-                0 => {
-                    if self.save(false) {
-                        self.run_pending(ctx, pending);
-                    }
-                }
+                0 => self.save(ctx, false, Some(pending)),
                 1 => self.run_pending(ctx, pending),
                 _ => self.request_focus(ctx),
             },
+            Dialog::BigFile(path, _) => {
+                if c == 0 {
+                    self.load(ctx, &path, None);
+                }
+                self.request_focus(ctx);
+            }
+            Dialog::Overwrite(path, then) => {
+                if c == 0 {
+                    self.save_checked(ctx, path, then, true, false);
+                }
+                self.request_focus(ctx);
+            }
+            Dialog::Lossy(path, then) => {
+                match c {
+                    0 => {
+                        self.enc = Encoding::Utf8;
+                        self.save_checked(ctx, path, then, true, true);
+                    }
+                    1 => self.save_checked(ctx, path, then, true, true),
+                    _ => {}
+                }
+                self.request_focus(ctx);
+            }
             Dialog::Reload => {
                 if c == 0
                     && let Some(f) = self.path.clone()
@@ -1496,14 +1631,10 @@ impl HeMiPadApp {
             }
             match a {
                 Act::New => self.guard(ctx, Pending::New),
-                Act::NewWindow => sys::new_window(None),
+                Act::NewWindow => self.new_window(None),
                 Act::Open => self.guard(ctx, Pending::Open),
-                Act::Save => {
-                    self.save(false);
-                }
-                Act::SaveAs => {
-                    self.save(true);
-                }
+                Act::Save => self.save(ctx, false, None),
+                Act::SaveAs => self.save(ctx, true, None),
                 Act::PageSetup | Act::Print if !crate::print::has_printer() => self.dialog = Some(Dialog::NoPrinter),
                 Act::PageSetup => {
                     let mut m = self.s.margins;
@@ -1628,11 +1759,15 @@ impl HeMiPadApp {
                 }
                 Act::DismissToast => self.toast = None,
                 Act::OpenUrl(url) => sys::open_url(url),
-                Act::Launcher => crate::launcher::open(),
+                Act::Launcher => {
+                    if let Err(e) = crate::launcher::open() {
+                        self.toast(format!("{}: {e}", tr("HeMi Launcher cannot be started", "HeMi Launcher nejde spustit")), Tone::Critical);
+                    }
+                }
                 Act::Licences => {
                     let file = std::env::temp_dir().join("HeMiPad-ThirdPartyNotices.txt");
                     match std::fs::write(&file, include_str!("../assets/ThirdPartyNotices.txt")) {
-                        Ok(()) => sys::new_window(Some(&file)),
+                        Ok(()) => self.new_window(Some(&file)),
                         Err(e) => self.toast(format!("{}: {e}", tr("The licenses cannot be opened", "Licence nejde otevřít")), Tone::Critical),
                     }
                 }
@@ -1699,7 +1834,8 @@ impl eframe::App for HeMiPadApp {
                         }
                     }
                 });
-                self.s.save();
+                // the window is closing: no place left to show a failure (the earlier changes were saved, or told)
+                let _ = self.s.save();
             }
         }
 
@@ -1709,7 +1845,7 @@ impl eframe::App for HeMiPadApp {
         });
         if let Some((first, rest)) = dropped.split_first() {
             for f in rest {
-                sys::new_window(Some(f));
+                self.new_window(Some(f));
             }
             self.guard(&ctx, Pending::OpenPath(first.clone()));
         }
@@ -1784,7 +1920,7 @@ impl eframe::App for HeMiPadApp {
             self.act(&ctx, acts);
             if self.s != self.saved_settings {
                 self.saved_settings = self.s.clone();
-                self.s.save();
+                self.save_settings();
             }
             return;
         }
@@ -1821,7 +1957,7 @@ impl eframe::App for HeMiPadApp {
         self.update_title(&ctx);
         if self.s != self.saved_settings {
             self.saved_settings = self.s.clone();
-            self.s.save();
+            self.save_settings();
         }
     }
 
@@ -1864,7 +2000,7 @@ fn group_digits(n: usize) -> String {
     let s = n.to_string();
     let mut out = String::new();
     for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             out.push('\u{A0}');
         }
         out.push(c);
@@ -1923,12 +2059,14 @@ impl HasWindowHandle for Parent {
     fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
         let hwnd = std::num::NonZeroIsize::new(self.0).ok_or(HandleError::Unavailable)?;
         let raw = RawWindowHandle::Win32(raw_window_handle::Win32WindowHandle::new(hwnd));
+        // SAFETY: the HWND is the main window of this app, which outlives the modal file dialog that borrows it.
         Ok(unsafe { WindowHandle::borrow_raw(raw) })
     }
 }
 
 impl HasDisplayHandle for Parent {
     fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        // SAFETY: the Windows display handle carries no pointer and is always valid.
         Ok(unsafe { DisplayHandle::borrow_raw(RawDisplayHandle::Windows(WindowsDisplayHandle::new())) })
     }
 }

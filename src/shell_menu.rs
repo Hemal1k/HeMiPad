@@ -4,11 +4,12 @@
 
 use crate::i18n::tr;
 use crate::sys::wide;
+use std::path::PathBuf;
 use std::ptr::{null, null_mut};
 use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
 use windows_sys::Win32::System::Registry::{
-    HKEY, HKEY_CURRENT_USER, KEY_WRITE, REG_SZ, RRF_RT_REG_SZ, RegCloseKey, RegCreateKeyExW, RegDeleteKeyW,
-    RegDeleteTreeW, RegGetValueW, RegSetValueExW,
+    HKEY, HKEY_CURRENT_USER, KEY_WRITE, REG_SZ, RRF_RT_REG_SZ, RegCloseKey, RegCreateKeyExW, RegDeleteTreeW,
+    RegGetValueW, RegSetValueExW,
 };
 
 /// The key of the item, for every file type.
@@ -27,6 +28,7 @@ fn read(key: &str) -> Option<String> {
     let k = wide(key);
     let mut buf = vec![0u16; 2048];
     let mut size = (buf.len() * 2) as u32;
+    // SAFETY: the key name is NUL-terminated and lives for the call; `size` is the size of `buf` in bytes.
     let r = unsafe { RegGetValueW(HKEY_CURRENT_USER, k.as_ptr(), null(), RRF_RT_REG_SZ, null_mut(), buf.as_mut_ptr() as _, &mut size) };
     (r == ERROR_SUCCESS).then(|| {
         let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
@@ -38,6 +40,8 @@ fn write(key: &str, name: Option<&str>, value: &str) -> Result<(), String> {
     let k = wide(key);
     let n = name.map(wide);
     let v = wide(value);
+    // SAFETY: the names and the value are NUL-terminated and live for the calls; the size passed is that of `v`
+    // in bytes (with its NUL, as REG_SZ wants); the key opened here is closed before returning.
     unsafe {
         let mut hkey: HKEY = null_mut();
         let r = RegCreateKeyExW(HKEY_CURRENT_USER, k.as_ptr(), 0, null(), 0, KEY_WRITE, null(), &mut hkey, null_mut());
@@ -69,20 +73,53 @@ pub fn set(on: bool) -> Result<(), String> {
         write(&format!(r"{KEY}\command"), None, &cmd)?;
     } else {
         let k = wide(KEY);
+        // SAFETY: the subkey name is NUL-terminated and lives for the call. With a subkey given, RegDeleteTreeW
+        // removes the key itself too, so no RegDeleteKeyW is needed after it.
         let r = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, k.as_ptr()) };
         if r != ERROR_SUCCESS && r != ERROR_FILE_NOT_FOUND {
             return Err(format!("{} ({r}).", tr("The item could not be removed", "Položku se nepodařilo odebrat – chyba")));
         }
-        let _ = unsafe { RegDeleteKeyW(HKEY_CURRENT_USER, k.as_ptr()) };
     }
     Ok(())
 }
 
-/// The item is on but points to another place (HeMiPad was moved) or has the text of the other language: write it again.
+/// The installer (`--repair`, after an installation or a move): the item is on but points to another place or has
+/// the text of the other language – write it again for this exe. Runs without a window, so a failure is not shown;
+/// the item then stays as it was.
 pub fn repair() {
     if let (true, Some((cmd, _))) = (is_on(), command())
         && (read(&format!(r"{KEY}\command")).as_deref() != Some(cmd.as_str()) || read(KEY).as_deref() != Some(text()))
     {
         let _ = set(true);
+    }
+}
+
+/// The exe in a command `"C:\…\HeMiPad.exe" "%1"`.
+fn exe_of(cmd: &str) -> Option<PathBuf> {
+    cmd.strip_prefix('"')?.split('"').next().filter(|s| !s.is_empty()).map(PathBuf::from)
+}
+
+/// A normal start: the item keeps pointing to the HeMiPad it was switched on for (a portable copy started from
+/// Downloads does not take it over). Only when that exe is gone it points to this one; the text follows the language.
+/// A failure is not shown (nothing the user asked for right now); the item then stays as it was.
+pub fn repair_if_broken() {
+    if !is_on() {
+        return;
+    }
+    let target = read(&format!(r"{KEY}\command")).as_deref().and_then(exe_of);
+    if !target.is_some_and(|p| p.is_file()) {
+        repair();
+    } else if read(KEY).as_deref() != Some(text()) {
+        let _ = write(KEY, None, text());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn exe_of_command() {
+        assert_eq!(super::exe_of(r#""C:\A b\HeMiPad.exe" "%1""#), Some(r"C:\A b\HeMiPad.exe".into()));
+        assert_eq!(super::exe_of("HeMiPad.exe %1"), None);
+        assert_eq!(super::exe_of(r#""" "%1""#), None);
     }
 }

@@ -61,6 +61,7 @@ fn file() -> Option<PathBuf> {
     let dir = roaming.join("HeMi").join("HeMiPad");
     let old = roaming.join("HeMiPad");
     if !dir.exists() && old.is_dir() {
+        // a failed move is not an error: the settings start again from the defaults in the new folder
         let _ = std::fs::create_dir_all(roaming.join("HeMi"));
         let _ = std::fs::rename(&old, &dir);
     }
@@ -108,8 +109,9 @@ impl Settings {
         s
     }
 
-    pub fn save(&self) {
-        let Some(f) = file() else { return };
+    /// Writes settings.ini (first to a temporary file, so a crash never leaves half of it).
+    pub fn save(&self) -> std::io::Result<()> {
+        let Some(f) = file() else { return Err(std::io::Error::other("APPDATA is not set")) };
         let b = |v: bool| if v { "1" } else { "0" };
         let m = self.margins;
         let text = format!(
@@ -136,8 +138,12 @@ impl Settings {
             self.scale,
         );
         if let Some(dir) = f.parent() {
-            let _ = std::fs::create_dir_all(dir);
+            std::fs::create_dir_all(dir)?;
         }
-        let _ = std::fs::write(f, text);
+        let tmp = f.with_extension("ini.tmp");
+        std::fs::write(&tmp, text)?;
+        std::fs::rename(&tmp, &f).inspect_err(|_| {
+            let _ = std::fs::remove_file(&tmp);
+        })
     }
 }

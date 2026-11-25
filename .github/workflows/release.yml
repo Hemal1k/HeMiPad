@@ -21,11 +21,25 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.release.tag_name || github.ref }}
 
+      # the tag of the release must be the version in Cargo.toml (v1.3.0 = 1.3.0): else the downloads would carry another
+      # version than the release they are attached to
+      - name: Tag = version
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ($env:TAG.TrimStart('v') -ne $version) { throw "The tag $env:TAG is not the version $version of Cargo.toml." }
+
+      # fixed versions: the same compiler and installer builder for every release (the ones release.ps1 is tried with)
       - name: Rust
-        run: rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --target x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+          rustup default 1.99.1
 
       - name: Inno Setup
-        run: choco install innosetup --no-progress -y
+        run: choco install innosetup --version=6.7.3 --no-progress -y
 
       - name: Build the installer and the portable exe files
         shell: pwsh
