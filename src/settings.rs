@@ -28,6 +28,8 @@ pub struct Settings {
     /// Where the window was (top left corner, points) and the scale of that monitor (pixels per point).
     pub position: Option<(f32, f32)>,
     pub scale: f32,
+    /// Write log.txt in the settings folder (off by default; paths and errors only, never the text).
+    pub logging: bool,
 }
 
 impl Default for Settings {
@@ -50,13 +52,14 @@ impl Default for Settings {
             maximized: false,
             position: None,
             scale: 1.0,
+            logging: false,
         }
     }
 }
 
-/// %AppData%\HeMi\HeMiPad\settings.ini – the settings of all HeMi apps are under %AppData%\HeMi; the folder of the older
-/// versions (%AppData%\HeMiPad) is moved there the first time.
-fn file() -> Option<PathBuf> {
+/// %AppData%\HeMi\HeMiPad – the settings of all HeMi apps are under %AppData%\HeMi; the folder of the older
+/// versions (%AppData%\HeMiPad) is moved there the first time. It may not exist yet.
+pub fn dir() -> Option<PathBuf> {
     let roaming = PathBuf::from(std::env::var_os("APPDATA")?);
     let dir = roaming.join("HeMi").join("HeMiPad");
     let old = roaming.join("HeMiPad");
@@ -65,7 +68,12 @@ fn file() -> Option<PathBuf> {
         let _ = std::fs::create_dir_all(roaming.join("HeMi"));
         let _ = std::fs::rename(&old, &dir);
     }
-    Some(dir.join("settings.ini"))
+    Some(dir)
+}
+
+/// %AppData%\HeMi\HeMiPad\settings.ini
+fn file() -> Option<PathBuf> {
+    Some(dir()?.join("settings.ini"))
 }
 impl Settings {
     pub fn load() -> Settings {
@@ -103,6 +111,7 @@ impl Settings {
                     }
                 }
                 "Scale" => s.scale = f.unwrap_or(1.0).clamp(0.5, 5.0),
+                "Logging" => s.logging = b,
                 _ => {}
             }
         }
@@ -116,7 +125,7 @@ impl Settings {
         let m = self.margins;
         let text = format!(
             "Language={}\nTheme={}\nWordWrap={}\nStatusBar={}\nLineNumbers={}\nSpelling={}\nSyntax={}\nZoom={}\n\
-             MatchCase={}\nWrapAround={}\nMargins={},{},{},{}\nWidth={}\nHeight={}\nMaximized={}\n{}Scale={}\n",
+             MatchCase={}\nWrapAround={}\nMargins={},{},{},{}\nWidth={}\nHeight={}\nMaximized={}\n{}Scale={}\nLogging={}\n",
             self.language.key(),
             self.theme,
             b(self.word_wrap),
@@ -136,6 +145,7 @@ impl Settings {
             b(self.maximized),
             self.position.map(|(x, y)| format!("Position={},{}\n", x.round(), y.round())).unwrap_or_default(),
             self.scale,
+            b(self.logging),
         );
         if let Some(dir) = f.parent() {
             std::fs::create_dir_all(dir)?;

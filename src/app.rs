@@ -8,6 +8,7 @@
 
 use crate::doc::{self, Encoding, Eol};
 use crate::i18n::{self, plural, tr};
+use crate::log;
 use crate::settings::Settings;
 use crate::spell::{self, Reply, Spell};
 use crate::syntax::{self, Colors, Lang};
@@ -151,6 +152,9 @@ enum Act {
     UiLang(i18n::Choice),
     Theme(u8),
     ShellMenu,
+    Logging,
+    OpenLog,
+    OpenSettingsFolder,
 }
 
 /// Line / column of the cursor and the size of the text, computed again only when they change.
@@ -167,6 +171,8 @@ pub struct HeMiPadApp {
     mica: bool,
     /// The item Open in HeMiPad is in the File Explorer menu.
     shell_menu: bool,
+    /// Windows 11: its new menu shows the item only under "Show more options".
+    win11: bool,
     p: Palette,
     source: theme::Source,
     theme_checked: Instant,
@@ -233,6 +239,7 @@ impl HeMiPadApp {
         let mut app = HeMiPadApp {
             mica,
             shell_menu: crate::shell_menu::is_on(),
+            win11: crate::sys::windows_11(),
             p,
             source,
             theme_checked: Instant::now(),
@@ -335,6 +342,10 @@ impl HeMiPadApp {
     fn load(&mut self, ctx: &egui::Context, path: &Path, forced: Option<Encoding>) {
         match doc::load(path, forced) {
             Ok(l) => {
+                // the log itself opened in HeMiPad: not written in it (the window would see it change at once)
+                if log::file().is_none_or(|f| !same_file(&f, path)) {
+                    log::write(&format!("Opened {} ({})", path.display(), l.encoding.label()));
+                }
                 self.text = l.text;
                 self.enc = l.encoding;
                 self.eol = l.eol;
@@ -364,7 +375,7 @@ impl HeMiPadApp {
                     self.toast(t, Tone::Caution);
                 }
             }
-            Err(e) => self.toast(format!("{}: {e}", tr("The file cannot be opened", "Soubor nejde otevřít")), Tone::Critical),
+            Err(e) => self.fail(format!("{}: {e}", tr("The file cannot be opened", "Soubor nejde otevřít")), Some(path)),
         }
     }
 
@@ -445,6 +456,9 @@ impl HeMiPadApp {
         let path = path.to_path_buf();
         match doc::save(&path, &self.text, self.enc, self.eol) {
             Ok(lossy) => {
+                if log::file().is_none_or(|f| !same_file(&f, &path)) {
+                    log::write(&format!("Saved {} ({}, {})", path.display(), self.enc.label(), self.eol.label()));
+                }
                 if self.path.as_ref() != Some(&path) {
                     self.lang = Lang::from_path(&path);
                     self.indent = indent_unit(&self.text, self.lang);
@@ -464,7 +478,7 @@ impl HeMiPadApp {
                 true
             }
             Err(e) => {
-                self.toast(format!("{}: {e}", tr("The file cannot be saved", "Soubor nejde uložit")), Tone::Critical);
+                self.fail(format!("{}: {e}", tr("The file cannot be saved", "Soubor nejde uložit")), Some(&path));
                 false
             }
         }
@@ -507,10 +521,19 @@ impl HeMiPadApp {
         self.toast = Some(Toast { text: text.into(), tone, until: Instant::now() + Duration::from_secs(6) });
     }
 
+    /// An error: shown, and written in the log (with the file it is about). Never with words of the text.
+    fn fail(&mut self, text: String, file: Option<&Path>) {
+        match file {
+            Some(f) => log::write(&format!("Error: {text} [{}]", f.display())),
+            None => log::write(&format!("Error: {text}")),
+        }
+        self.toast(text, Tone::Critical);
+    }
+
     /// Another HeMiPad window (empty or with a file); a message when it does not start.
     fn new_window(&mut self, file: Option<&Path>) {
         if let Err(e) = sys::new_window(file) {
-            self.toast(format!("{}: {e}", tr("A new window cannot be opened", "Nové okno nejde otevřít")), Tone::Critical);
+            self.fail(format!("{}: {e}", tr("A new window cannot be opened", "Nové okno nejde otevřít")), None);
         }
     }
 
@@ -520,7 +543,7 @@ impl HeMiPadApp {
             Ok(()) => self.settings_failed = false,
             Err(e) if !self.settings_failed => {
                 self.settings_failed = true;
-                self.toast(format!("{}: {e}", tr("The settings cannot be saved", "Nastavení nejde uložit")), Tone::Critical);
+                self.fail(format!("{}: {e}", tr("The settings cannot be saved", "Nastavení nejde uložit")), None);
             }
             Err(_) => {}
         }
@@ -1348,7 +1371,7 @@ impl HeMiPadApp {
         });
     }
 
-    /// The settings in the whole window (as in HeMi Launcher): theme, language, File Explorer – and About at the end.
+    /// The settings in the whole window (as in HeMi Launcher): theme, language, File Explorer, logging – and About at the end.
     fn settings_page(&self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
         let p = self.p;
         ui.spacing_mut().item_spacing.y = 4.0;
@@ -1383,6 +1406,21 @@ impl HeMiPadApp {
                 acts.push(Act::ShellMenu);
             }
         });
+        ui.add_space(14.0);
+        section(ui, &p, tr("Troubleshooting", "Řešení problémů"));
+        row(ui, tr("Logging", "Logování"), &mut |ui| {
+            ui.label(RichText::new(if self.s.logging { tr("On", "Zapnuto") } else { tr("Off", "Vypnuto") }).size(14.0).color(p.text));
+            if toggle(ui, &p, self.s.logging).clicked() {
+                acts.push(Act::Logging);
+            }
+        });
+        let items = [
+            (tr("Open log", "Otevřít log"), tr("log.txt – opened and saved files (paths only, never the text) and errors", "log.txt – otevřené a uložené soubory (jen cesty, nikdy text) a chyby")),
+            (tr("Open settings folder", "Otevřít složku nastavení"), r"%AppData%\HeMi\HeMiPad"),
+        ];
+        if let Some(i) = card(ui, &p, |ui| crate::widgets::button_row(ui, &p, &items)) {
+            acts.push(if i == 0 { Act::OpenLog } else { Act::OpenSettingsFolder });
+        }
         ui.add_space(14.0);
         self.about_page(ui, acts);
     }
@@ -1647,7 +1685,7 @@ impl HeMiPadApp {
                     let sel = (!sel.is_empty()).then_some(sel.as_str());
                     match crate::print::print(self.hwnd, &self.name(), &self.text, sel, &self.s.font, self.s.margins) {
                         Ok(_) => {}
-                        Err(e) => self.toast(e, Tone::Critical),
+                        Err(e) => self.fail(e, None),
                     }
                 }
                 Act::Exit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
@@ -1723,18 +1761,46 @@ impl HeMiPadApp {
                 Act::ShellMenu => match crate::shell_menu::set(!self.shell_menu) {
                     Ok(()) => {
                         self.shell_menu = !self.shell_menu;
-                        let text = if self.shell_menu {
-                            tr(
-                                "“Open in HeMiPad” is in the menu of files (in Windows 11 under “Show more options”).",
-                                "„Otevřít v HeMiPadu“ je v nabídce souborů (ve Windows 11 pod „Zobrazit další možnosti“).",
-                            )
-                        } else {
-                            tr("The item was removed from the File Explorer menu.", "Položka byla z nabídky Průzkumníka souborů odebrána.")
+                        log::write(if self.shell_menu { "File Explorer item on" } else { "File Explorer item off" });
+                        // Windows 11 shows it only under "Show more options" (its new menu has no place for it without a
+                        // signed package; the classic menu of Windows 10 is ignored by current builds)
+                        let text = match (self.shell_menu, self.win11) {
+                            (true, true) => tr(
+                                "“Open in HeMiPad” is in the menu of files, under “Show more options”.",
+                                "„Otevřít v HeMiPadu“ je v nabídce souborů pod „Zobrazit další možnosti“.",
+                            ),
+                            (true, false) => tr("“Open in HeMiPad” is in the menu of files.", "„Otevřít v HeMiPadu“ je v nabídce souborů."),
+                            _ => tr("The item was removed from the File Explorer menu.", "Položka byla z nabídky Průzkumníka souborů odebrána."),
                         };
                         self.toast(text, Tone::Success);
                     }
-                    Err(e) => self.toast(e, Tone::Critical),
+                    Err(e) => self.fail(e, None),
                 },
+                Act::Logging => {
+                    if self.s.logging {
+                        log::write("Logging off");
+                    }
+                    self.s.logging = !self.s.logging;
+                    log::set_enabled(self.s.logging);
+                    if self.s.logging {
+                        log::write(&format!("Logging on (HeMiPad {})", env!("CARGO_PKG_VERSION")));
+                    }
+                }
+                Act::OpenLog => match log::file() {
+                    Some(f) if f.is_file() => self.new_window(Some(&f)),
+                    _ => self.toast(
+                        tr("There is no log yet – turn on Logging first.", "Log zatím není – nejdřív zapni Logování."),
+                        Tone::Caution,
+                    ),
+                },
+                Act::OpenSettingsFolder => {
+                    let r = crate::settings::dir()
+                        .ok_or_else(|| std::io::Error::other("APPDATA is not set"))
+                        .and_then(|d| std::fs::create_dir_all(&d).and_then(|()| sys::open_folder(&d)));
+                    if let Err(e) = r {
+                        self.fail(format!("{}: {e}", tr("The settings folder cannot be opened", "Složku nastavení nejde otevřít")), None);
+                    }
+                }
                 Act::Theme(m) => {
                     self.s.theme = m;
                     self.follow_theme(ctx, true);
@@ -1761,14 +1827,14 @@ impl HeMiPadApp {
                 Act::OpenUrl(url) => sys::open_url(url),
                 Act::Launcher => {
                     if let Err(e) = crate::launcher::open() {
-                        self.toast(format!("{}: {e}", tr("HeMi Launcher cannot be started", "HeMi Launcher nejde spustit")), Tone::Critical);
+                        self.fail(format!("{}: {e}", tr("HeMi Launcher cannot be started", "HeMi Launcher nejde spustit")), None);
                     }
                 }
                 Act::Licences => {
                     let file = std::env::temp_dir().join("HeMiPad-ThirdPartyNotices.txt");
                     match std::fs::write(&file, include_str!("../assets/ThirdPartyNotices.txt")) {
                         Ok(()) => self.new_window(Some(&file)),
-                        Err(e) => self.toast(format!("{}: {e}", tr("The licenses cannot be opened", "Licence nejde otevřít")), Tone::Critical),
+                        Err(e) => self.fail(format!("{}: {e}", tr("The licenses cannot be opened", "Licence nejde otevřít")), None),
                     }
                 }
                 Act::SpellReplace(r, w) => {
@@ -1994,6 +2060,12 @@ fn indent_unit(text: &str, lang: Lang) -> String {
     } else {
         "\t".into()
     }
+}
+
+/// The same file, whatever the case of the letters or a relative path (as Windows compares paths).
+fn same_file(a: &Path, b: &Path) -> bool {
+    let full = |p: &Path| std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf()).to_string_lossy().to_lowercase();
+    full(a) == full(b)
 }
 
 fn group_digits(n: usize) -> String {
