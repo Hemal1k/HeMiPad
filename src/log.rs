@@ -1,6 +1,8 @@
 //! The optional log (Settings → Logging, off by default): %AppData%\HeMi\HeMiPad\log.txt. Only what HeMiPad did –
 //! the paths of opened and saved files, the changes of the File Explorer menu and the errors – never the text of a
 //! file. Kept under 1 MB: when it grows over, the older half is dropped.
+//! The same in all HeMi apps: %AppData%\HeMi\<app>\log.txt, the local time, at most 1 MB (then the older half goes), the
+//! folders of the user written as %USERPROFILE%, %AppData% and %LocalAppData%.
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -30,7 +32,7 @@ pub fn write(line: &str) {
     if let Some(dir) = f.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    let entry = format!("{} {}\r\n", now(), line.replace(['\r', '\n'], " "));
+    let entry = format!("{} {}\r\n", now(), scrub(line));
     if std::fs::metadata(&f).is_ok_and(|m| m.len() as usize + entry.len() > MAX)
         && let Ok(old) = std::fs::read(&f)
     {
@@ -65,8 +67,54 @@ fn now() -> String {
     format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond)
 }
 
+/// One line without the folders and the name of the user.
+fn scrub(text: &str) -> String {
+    let mut s = text.replace(['\r', '\n'], " ");
+    // the longer folders first (both AppData folders are inside the profile)
+    for (var, name) in [("LOCALAPPDATA", "%LocalAppData%"), ("APPDATA", "%AppData%"), ("USERPROFILE", "%USERPROFILE%")] {
+        if let Some(v) = std::env::var_os(var).map(|v| v.to_string_lossy().trim_end_matches('\\').to_string())
+            && v.len() > 3
+        {
+            s = replace_ci(&s, &v, name);
+        }
+    }
+    // the name only as a folder of Users (a name like "HeMi" is also a part of the names of the apps)
+    if let Ok(user) = std::env::var("USERNAME")
+        && !user.is_empty()
+    {
+        s = replace_ci(&s, &format!(r"\Users\{user}"), r"\Users\<user>");
+    }
+    s
+}
+
+/// `needle` replaced in any case of its ASCII letters (paths of Windows).
+fn replace_ci(hay: &str, needle: &str, with: &str) -> String {
+    let mut out = String::with_capacity(hay.len());
+    let mut i = 0;
+    while i < hay.len() {
+        if let Some(part) = hay.get(i..i + needle.len())
+            && part.eq_ignore_ascii_case(needle)
+        {
+            out.push_str(with);
+            i += needle.len();
+            continue;
+        }
+        let Some(c) = hay[i..].chars().next() else { break };
+        out.push(c);
+        i += c.len_utf8();
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
+    use super::{replace_ci, scrub};
+
+    #[test]
+    fn the_user_folder_is_left_out() {
+        assert_eq!(replace_ci(r"C:\USERS\Jan\a.txt – č", r"c:\users\jan", "%USERPROFILE%"), r"%USERPROFILE%\a.txt – č");
+        assert_eq!(scrub("a\r\nb"), "a  b");
+    }
     use super::trim;
 
     #[test]
