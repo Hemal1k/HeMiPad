@@ -28,7 +28,7 @@ pub struct Settings {
     /// Where the window was (top left corner, points) and the scale of that monitor (pixels per point).
     pub position: Option<(f32, f32)>,
     pub scale: f32,
-    /// Write log.txt in the settings folder (off by default; paths and errors only, never the text).
+    /// Write Logs\log-<day>.txt in the settings folder (off by default; paths and errors only, never the text).
     pub logging: bool,
 }
 

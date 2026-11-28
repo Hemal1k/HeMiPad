@@ -24,6 +24,7 @@ fn main() -> eframe::Result {
     let s = settings::Settings::load();
     i18n::set(s.language);
     log::set_enabled(s.logging);
+    log::catch_panics();
     // the installer after an installation or a move to another folder: the File Explorer item points to this exe
     if file.as_deref().and_then(|f| f.to_str()) == Some("--repair") {
         shell_menu::repair();

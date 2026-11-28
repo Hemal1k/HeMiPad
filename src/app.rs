@@ -1415,7 +1415,7 @@ impl HeMiPadApp {
             }
         });
         let items = [
-            (tr("Open log", "Otevřít log"), tr("log.txt – opened and saved files (paths only, never the text) and errors", "log.txt – otevřené a uložené soubory (jen cesty, nikdy text) a chyby")),
+            (tr("Open log", "Otevřít log"), tr("one log a day – opened and saved files (paths only, never the text) and errors", "jeden log za den – otevřené a uložené soubory (jen cesty, nikdy text) a chyby")),
             (tr("Open settings folder", "Otevřít složku nastavení"), r"%AppData%\HeMi\HeMiPad"),
         ];
         if let Some(i) = card(ui, &p, |ui| crate::widgets::button_row(ui, &p, &items)) {
@@ -1777,14 +1777,8 @@ impl HeMiPadApp {
                     Err(e) => self.fail(e, None),
                 },
                 Act::Logging => {
-                    if self.s.logging {
-                        log::write("Logging off");
-                    }
                     self.s.logging = !self.s.logging;
-                    log::set_enabled(self.s.logging);
-                    if self.s.logging {
-                        log::write(&format!("Logging on (HeMiPad {})", env!("CARGO_PKG_VERSION")));
-                    }
+                    log::set_enabled(self.s.logging); // writes "Logging on / off" itself
                 }
                 Act::OpenLog => match log::file() {
                     Some(f) if f.is_file() => self.new_window(Some(&f)),
